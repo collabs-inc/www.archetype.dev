@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local tooling artifacts
+.playwright-mcp/
+.superpowers/
+
+# Local screenshots
+*.png
+
+# macOS
+.DS_Store
