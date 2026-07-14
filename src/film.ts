@@ -163,8 +163,9 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       el.style.transform =
         `translate3d(${x}vw, ${y}vh, 0) translate(-50%, -50%) rotate(${rot}deg) scale(${scale})`;
 
-      // Reveal output lines as the agent "works".
-      const age = p - t.spawn;
+      // Reveal output lines as the agent "works". Clamped so the hero terminal,
+      // which spawns before p = 0, still starts at a bare prompt.
+      const age = p - Math.max(t.spawn, 0);
       const shown = Math.min(t.lineCount, Math.floor(age / 0.009));
       if (shown !== t.shown) {
         t.shown = shown;

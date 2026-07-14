@@ -16,6 +16,13 @@ export const ACTS = {
 
 export const TERMINAL_COUNT = 34;
 
+/**
+ * The first terminal spawns before the film starts, so it has already finished
+ * fading in by the time the page is at rest — you land on it, not on an empty
+ * screen. Its output still waits for p > 0.
+ */
+export const FIRST_SPAWN = -0.03;
+
 export function clamp01(n: number): number {
   if (n < 0) return 0;
   if (n > 1) return 1;
@@ -58,5 +65,5 @@ export function mulberry32(seed: number): () => number {
 export function spawnPoint(i: number, count: number): number {
   const t = i / (count - 1);
   const eased = t ** 0.55;
-  return lerp(0.04, ACTS.accretionEnd - 0.02, eased);
+  return lerp(FIRST_SPAWN, ACTS.accretionEnd - 0.02, eased);
 }

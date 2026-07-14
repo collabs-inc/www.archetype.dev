@@ -90,9 +90,14 @@ body {
 .term__cmd { color: var(--ink); }
 .term__cmd::first-letter { color: var(--accent); }
 
+/* Unrevealed lines take no space, so the caret always sits just under the last
+   line of output — at the bare prompt when the agent hasn't said anything yet. */
 .term__line {
-  opacity: clamp(0, calc(var(--shown) - var(--i)), 1);
-  transition: opacity 0.18s linear;
+  --on: clamp(0, calc(var(--shown) - var(--i)), 1);
+  height: calc(var(--on) * 1.7em);
+  opacity: var(--on);
+  overflow: hidden;
+  transition: opacity 0.18s linear, height 0.18s linear;
 }
 
 .term__caret {
