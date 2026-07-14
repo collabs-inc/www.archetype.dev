@@ -17,11 +17,26 @@ export const ACTS = {
 export const TERMINAL_COUNT = 34;
 
 /**
- * The first terminal spawns before the film starts, so it has already finished
- * fading in by the time the page is at rest — you land on it, not on an empty
- * screen. Its output still waits for p > 0.
+ * The hero terminal spawns before the film starts, so it has already finished
+ * fading in by the time the page is at rest — you land on a shell, not on an
+ * empty screen. It sits at a bare prompt until the reader scrolls.
  */
 export const FIRST_SPAWN = -0.03;
+
+/**
+ * The hero beat: the reader scrolls, a command types itself into the raw shell,
+ * and it launches. Only once it has printed does the crowd start piling on.
+ */
+export const HERO = {
+  typeStart: 0.012,
+  typeEnd: 0.05,
+  runStart: 0.06,
+  /** Scroll distance per line of hero output. */
+  linePace: 0.012,
+} as const;
+
+/** The rest of the terminals hold off until the hero has had its moment. */
+export const CROWD_START = 0.12;
 
 export function clamp01(n: number): number {
   if (n < 0) return 0;
@@ -63,7 +78,8 @@ export function mulberry32(seed: number): () => number {
  * rest pile on with accelerating frequency, so the mess outruns the reader.
  */
 export function spawnPoint(i: number, count: number): number {
-  const t = i / (count - 1);
+  if (i === 0) return FIRST_SPAWN;
+  const t = (i - 1) / (count - 2);
   const eased = t ** 0.55;
-  return lerp(FIRST_SPAWN, ACTS.accretionEnd - 0.02, eased);
+  return lerp(CROWD_START, ACTS.accretionEnd - 0.02, eased);
 }

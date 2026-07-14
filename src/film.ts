@@ -1,6 +1,7 @@
-import { SESSIONS } from './terminal-scripts';
+import { HERO_SESSION, SESSIONS } from './terminal-scripts';
 import {
   ACTS,
+  HERO,
   TERMINAL_COUNT,
   clamp01,
   easeInOut,
@@ -10,6 +11,10 @@ import {
   spawnPoint,
   span,
 } from './timeline';
+
+/** Dead center of the crowd, in viewport percent. The hero terminal sits here. */
+const CENTER_X = 50;
+const CENTER_Y = 50;
 
 interface Term {
   readonly el: HTMLElement;
@@ -21,29 +26,33 @@ interface Term {
   readonly rot: number;
   readonly lineCount: number;
   shown: number;
+  /** Hero only: the span the command types itself into, and how much is typed. */
+  readonly typed: HTMLElement | null;
+  typedCount: number;
 }
 
 /** Where the crowd of terminals lives before it gets thrown away. */
 function scatter(i: number, rnd: () => number): { x: number; y: number; rot: number } {
-  if (i === 0) return { x: 50, y: 46, rot: 0 };
+  if (i === 0) return { x: CENTER_X, y: CENTER_Y, rot: 0 };
   // Spiral outward: later windows land further from center, past the edges.
   const angle = i * 2.399 + rnd() * 0.6;
   const reach = 6 + (i / TERMINAL_COUNT) ** 0.8 * 46;
   return {
-    x: 50 + Math.cos(angle) * reach * 1.5,
-    y: 46 + Math.sin(angle) * reach * 0.85,
+    x: CENTER_X + Math.cos(angle) * reach * 1.5,
+    y: CENTER_Y + Math.sin(angle) * reach * 0.85,
     rot: (rnd() - 0.5) * 5,
   };
 }
 
 function buildTerminal(i: number, rnd: () => number): Term {
-  const session = SESSIONS[i % SESSIONS.length]!;
+  const hero = i === 0;
+  const session = hero ? HERO_SESSION : SESSIONS[i % SESSIONS.length]!;
   const { x, y, rot } = scatter(i, rnd);
 
   const el = document.createElement('div');
   el.className = 'term';
   el.style.zIndex = String(i + 1);
-  if (i === 0) el.classList.add('term--first');
+  if (hero) el.classList.add('term--first');
 
   const bar = document.createElement('div');
   bar.className = 'term__bar';
@@ -54,7 +63,15 @@ function buildTerminal(i: number, rnd: () => number): Term {
 
   const cmd = document.createElement('div');
   cmd.className = 'term__cmd';
-  cmd.textContent = `$ ${session.cmd}`;
+  let typed: HTMLElement | null = null;
+  if (hero) {
+    // A raw prompt. The command arrives on scroll, with the cursor riding its end.
+    cmd.innerHTML =
+      '<span class="term__sigil">$</span> <span class="term__typed"></span><span class="term__cursor"></span>';
+    typed = cmd.querySelector<HTMLElement>('.term__typed')!;
+  } else {
+    cmd.textContent = `$ ${session.cmd}`;
+  }
   body.append(cmd);
 
   session.lines.forEach((line, lineIndex) => {
@@ -70,7 +87,18 @@ function buildTerminal(i: number, rnd: () => number): Term {
   body.append(caret);
 
   el.append(bar, body);
-  return { el, body, spawn: spawnPoint(i, TERMINAL_COUNT), x, y, rot, lineCount: session.lines.length, shown: -1 };
+  return {
+    el,
+    body,
+    spawn: spawnPoint(i, TERMINAL_COUNT),
+    x,
+    y,
+    rot,
+    lineCount: session.lines.length,
+    shown: -1,
+    typed,
+    typedCount: -1,
+  };
 }
 
 /** The document that Act III builds: headings and prose as skeleton, agents as real blocks. */
@@ -163,13 +191,28 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       el.style.transform =
         `translate3d(${x}vw, ${y}vh, 0) translate(-50%, -50%) rotate(${rot}deg) scale(${scale})`;
 
-      // Reveal output lines as the agent "works". Clamped so the hero terminal,
-      // which spawns before p = 0, still starts at a bare prompt.
-      const age = p - Math.max(t.spawn, 0);
-      const shown = Math.min(t.lineCount, Math.floor(age / 0.009));
+      // Reveal output lines as the agent "works". The hero waits for its command
+      // to be typed and launched; the crowd just starts working on arrival.
+      let shown: number;
+      if (t.typed) {
+        const cmd = HERO_SESSION.cmd;
+        const chars = Math.round(span(p, HERO.typeStart, HERO.typeEnd) * cmd.length);
+        if (chars !== t.typedCount) {
+          t.typedCount = chars;
+          t.typed.textContent = cmd.slice(0, chars);
+        }
+        const running = p >= HERO.runStart;
+        el.classList.toggle('is-running', running);
+        shown = running ? Math.min(t.lineCount, Math.floor((p - HERO.runStart) / HERO.linePace)) : 0;
+      } else {
+        shown = Math.min(t.lineCount, Math.floor((p - t.spawn) / 0.009));
+      }
+
       if (shown !== t.shown) {
         t.shown = shown;
         t.body.style.setProperty('--shown', String(shown));
+        // Follow the tail: the window stays put, the text scrolls up inside it.
+        t.body.scrollTop = t.body.scrollHeight;
       }
     }
 

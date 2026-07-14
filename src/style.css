@@ -75,6 +75,8 @@ body {
   background: #333c46;
 }
 
+/* A fixed window. Output doesn't grow the box — it scrolls up inside it, and the
+   oldest lines run off the top, the way a real shell behaves. */
 .term__body {
   --shown: 0;
   padding: 10px 12px 12px;
@@ -82,22 +84,40 @@ body {
   font-size: 11px;
   line-height: 1.7;
   color: var(--dim);
-  min-height: 92px;
+  height: 92px;
+  overflow: hidden;
 }
 
-.term--first .term__body { font-size: 12.5px; min-height: 120px; }
+.term--first .term__body { font-size: 12.5px; height: 128px; }
 
 .term__cmd { color: var(--ink); }
 .term__cmd::first-letter { color: var(--accent); }
+.term__sigil { color: var(--accent); }
+
+/* The cursor at the prompt, riding the end of the command as it types. It hands
+   off to the caret below once the agent is running. */
+.term__cursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  vertical-align: -2px;
+  background: var(--accent);
+  animation: blink 1s steps(1) infinite;
+}
+
+.term--first .term__caret { display: none; }
+.term--first.is-running .term__cursor { display: none; }
+.term--first.is-running .term__caret { display: block; }
 
 /* Unrevealed lines take no space, so the caret always sits just under the last
-   line of output — at the bare prompt when the agent hasn't said anything yet. */
+   line of output — at the bare prompt when the agent hasn't said anything yet.
+   Height snaps rather than transitions, so the scroll position below stays true. */
 .term__line {
   --on: clamp(0, calc(var(--shown) - var(--i)), 1);
   height: calc(var(--on) * 1.7em);
   opacity: var(--on);
   overflow: hidden;
-  transition: opacity 0.18s linear, height 0.18s linear;
+  transition: opacity 0.18s linear;
 }
 
 .term__caret {
