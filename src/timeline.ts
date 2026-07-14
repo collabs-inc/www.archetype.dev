@@ -32,11 +32,36 @@ export const HERO = {
   typeEnd: 0.05,
   runStart: 0.06,
   /** Scroll distance per line of hero output. */
-  linePace: 0.012,
+  linePace: 0.02,
 } as const;
 
 /** The rest of the terminals hold off until the hero has had its moment. */
 export const CROWD_START = 0.12;
+
+/**
+ * The first arrivals land in a ring of slots around the hero, none of them
+ * touching. A window is ~25vw x ~31vh, so the slots are pitched wider than that
+ * — this is the phase where there is still room for everyone.
+ */
+export const GRID_SLOTS = [
+  { x: 78, y: 50 },
+  { x: 22, y: 50 },
+  { x: 50, y: 16 },
+  { x: 50, y: 84 },
+  { x: 78, y: 16 },
+  { x: 22, y: 84 },
+  { x: 78, y: 84 },
+  { x: 22, y: 16 },
+] as const;
+
+/** Where the orderly phase ends and windows start landing on top of each other. */
+export const GRID_END = 0.4;
+
+/**
+ * Scroll distance per line of crowd output. Paced so an agent that arrives early
+ * is still printing when the purge comes — they never sit finished and idle.
+ */
+export const LINE_PACE = 0.022;
 
 export function clamp01(n: number): number {
   if (n < 0) return 0;
@@ -79,7 +104,14 @@ export function mulberry32(seed: number): () => number {
  */
 export function spawnPoint(i: number, count: number): number {
   if (i === 0) return FIRST_SPAWN;
-  const t = (i - 1) / (count - 2);
-  const eased = t ** 0.55;
-  return lerp(CROWD_START, ACTS.accretionEnd - 0.02, eased);
+
+  // The ring: one window at a time, evenly spaced, with room to read each one.
+  if (i <= GRID_SLOTS.length) {
+    return lerp(CROWD_START, GRID_END, (i - 1) / GRID_SLOTS.length);
+  }
+
+  // The pile: gaps shrink as it goes, so arrivals accelerate into a flood.
+  const first = GRID_SLOTS.length + 1;
+  const t = (i - first) / (count - 1 - first);
+  return lerp(GRID_END, ACTS.accretionEnd - 0.02, t ** 0.7);
 }

@@ -1,7 +1,9 @@
 import { HERO_SESSION, SESSIONS } from './terminal-scripts';
 import {
   ACTS,
+  GRID_SLOTS,
   HERO,
+  LINE_PACE,
   TERMINAL_COUNT,
   clamp01,
   easeInOut,
@@ -23,7 +25,6 @@ interface Term {
   /** Resting position in the crowd, in viewport percent. */
   readonly x: number;
   readonly y: number;
-  readonly rot: number;
   readonly lineCount: number;
   shown: number;
   /** Hero only: the span the command types itself into, and how much is typed. */
@@ -31,23 +32,33 @@ interface Term {
   typedCount: number;
 }
 
-/** Where the crowd of terminals lives before it gets thrown away. */
-function scatter(i: number, rnd: () => number): { x: number; y: number; rot: number } {
-  if (i === 0) return { x: CENTER_X, y: CENTER_Y, rot: 0 };
-  // Spiral outward: later windows land further from center, past the edges.
-  const angle = i * 2.399 + rnd() * 0.6;
-  const reach = 6 + (i / TERMINAL_COUNT) ** 0.8 * 46;
+/**
+ * Where each terminal lives before it gets thrown away. Axis-aligned, always.
+ *
+ * The hero holds the center and the first arrivals take the ring around it,
+ * clear of each other — there is still room. Everything after that lands wherever
+ * it falls, on top of whatever is already there. That's the whole argument.
+ */
+function scatter(i: number, rnd: () => number): { x: number; y: number } {
+  if (i === 0) return { x: CENTER_X, y: CENTER_Y };
+
+  const slot = GRID_SLOTS[i - 1];
+  if (slot) return { x: slot.x, y: slot.y };
+
+  const j = i - 1 - GRID_SLOTS.length;
+  const spread = TERMINAL_COUNT - 1 - GRID_SLOTS.length;
+  const angle = j * 2.399 + rnd() * 0.9;
+  const reach = 10 + (j / spread) ** 0.7 * 42;
   return {
-    x: CENTER_X + Math.cos(angle) * reach * 1.5,
-    y: CENTER_Y + Math.sin(angle) * reach * 0.85,
-    rot: (rnd() - 0.5) * 5,
+    x: CENTER_X + Math.cos(angle) * reach * 1.6,
+    y: CENTER_Y + Math.sin(angle) * reach * 0.95,
   };
 }
 
 function buildTerminal(i: number, rnd: () => number): Term {
   const hero = i === 0;
   const session = hero ? HERO_SESSION : SESSIONS[i % SESSIONS.length]!;
-  const { x, y, rot } = scatter(i, rnd);
+  const { x, y } = scatter(i, rnd);
 
   const el = document.createElement('div');
   el.className = 'term';
@@ -93,7 +104,6 @@ function buildTerminal(i: number, rnd: () => number): Term {
     spawn: spawnPoint(i, TERMINAL_COUNT),
     x,
     y,
-    rot,
     lineCount: session.lines.length,
     shown: -1,
     typed,
@@ -184,7 +194,8 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       const x = lerp(t.x, 50, purge);
       const y = lerp(t.y, 112, purge);
       const scale = lerp(lerp(0.9, 1, appear), 0.04, purge);
-      const rot = lerp(t.rot, t.rot + (i % 2 ? 40 : -40), purge);
+      // Windows sit square. The only rotation is the tumble on the way to the trash.
+      const rot = lerp(0, i % 2 ? 40 : -40, purge);
       const opacity = appear * (1 - clamp01((purge - 0.75) / 0.25));
 
       el.style.opacity = String(opacity);
@@ -205,7 +216,7 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
         el.classList.toggle('is-running', running);
         shown = running ? Math.min(t.lineCount, Math.floor((p - HERO.runStart) / HERO.linePace)) : 0;
       } else {
-        shown = Math.min(t.lineCount, Math.floor((p - t.spawn) / 0.009));
+        shown = Math.min(t.lineCount, Math.floor((p - t.spawn) / LINE_PACE));
       }
 
       if (shown !== t.shown) {

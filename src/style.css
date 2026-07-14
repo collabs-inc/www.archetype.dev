@@ -27,7 +27,7 @@ body {
 
 /* ── The film ─────────────────────────────────────────────────────────────── */
 
-#film { height: 700vh; position: relative; }
+#film { height: 2100vh; position: relative; }
 
 #stage {
   position: sticky;
@@ -47,7 +47,7 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  width: 268px;
+  width: 360px;
   border-radius: 8px;
   background: var(--panel);
   border: 1px solid var(--edge);
@@ -56,7 +56,6 @@ body {
   overflow: hidden;
 }
 
-.term--first { width: 360px; }
 
 .term__bar {
   display: flex;
@@ -81,14 +80,12 @@ body {
   --shown: 0;
   padding: 10px 12px 12px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12.5px;
   line-height: 1.7;
   color: var(--dim);
-  height: 92px;
+  height: 250px;
   overflow: hidden;
 }
-
-.term--first .term__body { font-size: 12.5px; height: 128px; }
 
 .term__cmd { color: var(--ink); }
 .term__cmd::first-letter { color: var(--accent); }
@@ -222,6 +219,6 @@ body {
 
 @media (max-width: 720px) {
   .doc { width: 88vw; padding: 24px; }
-  .term { width: 200px; }
-  #film { height: 500vh; }
+  .term { width: 300px; }
+  #film { height: 1500vh; }
 }
