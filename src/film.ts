@@ -1,5 +1,4 @@
 import { SESSIONS } from './terminal-scripts';
-import { FILM_BEATS } from './copy';
 import {
   ACTS,
   TERMINAL_COUNT,
@@ -133,22 +132,7 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
   }
   world.append(siblingL, doc, siblingR);
 
-  const beats = document.createElement('div');
-  beats.className = 'beats';
-  const beatEls = FILM_BEATS.map((b) => {
-    const el = document.createElement('p');
-    el.className = 'beat';
-    if (b.text === '') {
-      el.classList.add('beat--empty');
-      el.textContent = `[ beat @ ${b.at} — your line ]`;
-    } else {
-      el.textContent = b.text;
-    }
-    beats.append(el);
-    return el;
-  });
-
-  stage.append(crowd, trash, world, beats);
+  stage.append(crowd, trash, world);
 
   return function render(p: number): void {
     // --- Act I + II: the crowd -------------------------------------------------
@@ -213,18 +197,6 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       const t = easeOut(span(docP, at * 0.85, at * 0.85 + 0.16));
       item.style.opacity = String(t);
       item.style.transform = `translate3d(0, ${lerp(10, 0, t)}px, 0)`;
-    }
-
-    // --- Beats -----------------------------------------------------------------
-    for (let i = 0; i < beatEls.length; i += 1) {
-      const beat = FILM_BEATS[i]!;
-      const el = beatEls[i]!;
-      const inP = span(p, beat.at - 0.04, beat.at);
-      const outP = span(p, beat.at + 0.05, beat.at + 0.1);
-      const o = inP * (1 - outP);
-      el.style.opacity = String(o);
-      el.style.transform = `translate3d(0, ${lerp(8, 0, easeOut(inP))}px, 0)`;
-      el.style.pointerEvents = o > 0.5 ? 'auto' : 'none';
     }
   };
 }

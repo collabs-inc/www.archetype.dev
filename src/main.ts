@@ -1,14 +1,11 @@
 import './style.css';
 import { mountFilm } from './film';
-import { mountEssay } from './essay';
 import { clamp01 } from './timeline';
 
 const film = document.querySelector<HTMLElement>('#film')!;
 const stage = document.querySelector<HTMLElement>('#stage')!;
-const below = document.querySelector<HTMLElement>('#below')!;
 
 const render = mountFilm(stage);
-mountEssay(below);
 
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
