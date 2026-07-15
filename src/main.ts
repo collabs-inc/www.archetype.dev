@@ -1,6 +1,6 @@
 import './style.css';
 import { mountFilm } from './film';
-import { clamp01, remapScroll } from './timeline';
+import { SEMANTIC_MAX, clamp01, remapScroll } from './timeline';
 
 const film = document.querySelector<HTMLElement>('#film')!;
 const stage = document.querySelector<HTMLElement>('#stage')!;
@@ -10,9 +10,10 @@ const render = mountFilm(stage);
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 if (reduced) {
-  // No scrub: show the third act, which is the argument. The chaos is a still.
+  // No scrub: show the final frame — the shared, populated workspace, which is the
+  // whole argument. The chaos is a still.
   film.classList.add('film--static');
-  render(1);
+  render(SEMANTIC_MAX);
 } else {
   let ticking = false;
   const update = (): void => {

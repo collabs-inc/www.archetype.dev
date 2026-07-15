@@ -6,6 +6,7 @@ import {
   HERO,
   LINE_PACE,
   T3,
+  T4,
   TERMINAL_COUNT,
   clamp01,
   easeInOut,
@@ -122,8 +123,26 @@ function buildTerminal(i: number, rnd: () => number): Term {
   };
 }
 
-/** A block in a document: a run of prose (skeleton) or an agent chip. */
-type Block = { readonly kind: 'h' | 'p' | 'p-short' } | { readonly kind: 'chip'; readonly session: Session };
+/** The other people in the workspace, shown as colored avatars and cursors in Act IV. */
+interface Mate {
+  readonly initial: string;
+  readonly color: string;
+}
+const TEAM: readonly Mate[] = [
+  { initial: 'M', color: '#5aa9e6' },
+  { initial: 'R', color: '#b58cf0' },
+  { initial: 'J', color: '#ef7fae' },
+  { initial: 'S', color: '#e0a458' },
+];
+
+/**
+ * A block in a document: a run of prose (skeleton) or an agent chip. A chip may be
+ * owned by a teammate (shown as an avatar badge) and may be `late` — revealed only
+ * in Act IV, as the shared document fills with other people's agents.
+ */
+type Block =
+  | { readonly kind: 'h' | 'p' | 'p-short' }
+  | { readonly kind: 'chip'; readonly session: Session; readonly owner?: number; readonly late?: boolean };
 
 /** A document in the product: a title and an ordered list of blocks. */
 interface Doc {
@@ -134,7 +153,12 @@ interface Doc {
 const para = { kind: 'p' } as const;
 const paraShort = { kind: 'p-short' } as const;
 const head = { kind: 'h' } as const;
-const agentBlock = (session: Session): Block => ({ kind: 'chip', session });
+const agentBlock = (session: Session, owner?: number, late?: boolean): Block => ({
+  kind: 'chip',
+  session,
+  ...(owner !== undefined ? { owner } : {}),
+  ...(late !== undefined ? { late } : {}),
+});
 
 /**
  * The docs Act III moves through, each a different shape: the first holds the hero
@@ -154,11 +178,13 @@ const DOCS: readonly Doc[] = [
     blocks: [para, paraShort, agentBlock(SESSIONS[2]!), para, agentBlock(SESSIONS[3]!), paraShort],
   },
   {
+    // The shared doc of Act IV: your agent up top, teammates' agents below, and
+    // more of theirs (`late`) that fill in as the multiuser beat lands.
     title: 'Platform migration',
     blocks: [
-      head, para, para, para, agentBlock(SESSIONS[8]!), paraShort, para,
-      agentBlock(SESSIONS[5]!), para, agentBlock(SESSIONS[4]!), para, para, head, para,
-      agentBlock(SESSIONS[10]!), paraShort, para, agentBlock(SESSIONS[6]!), para, paraShort,
+      head, para, para, agentBlock(SESSIONS[8]!), paraShort, para,
+      agentBlock(SESSIONS[5]!, 0), para, agentBlock(SESSIONS[4]!, 1), para, paraShort,
+      agentBlock(SESSIONS[10]!, 2, true), agentBlock(SESSIONS[6]!, 3, true),
     ],
   },
 ];
@@ -177,21 +203,23 @@ interface TreeNode {
   readonly label: string;
   readonly kind: 'folder' | 'doc' | 'file';
   readonly depth: number;
+  /** A teammate is working in this doc — shown as a presence dot in Act IV. */
+  readonly active?: number;
 }
 
 const TREE: readonly TreeNode[] = [
   { label: 'Workspace', kind: 'folder', depth: 0 },
   // The three docs we scrub through are siblings in this one branch.
   { label: 'Projects', kind: 'folder', depth: 1 },
-  { label: DOCS[0]!.title, kind: 'doc', depth: 2 },
+  { label: DOCS[0]!.title, kind: 'doc', depth: 2, active: 2 },
   { label: DOCS[1]!.title, kind: 'doc', depth: 2 },
   { label: DOCS[2]!.title, kind: 'doc', depth: 2 },
-  { label: 'Search indexing', kind: 'file', depth: 2 },
+  { label: 'Search indexing', kind: 'file', depth: 2, active: 0 },
   { label: 'Realtime sync', kind: 'file', depth: 2 },
   { label: 'Notes', kind: 'folder', depth: 1 },
-  { label: 'Architecture', kind: 'file', depth: 2 },
+  { label: 'Architecture', kind: 'file', depth: 2, active: 3 },
   { label: 'On-call runbook', kind: 'file', depth: 2 },
-  { label: 'RFC drafts', kind: 'file', depth: 2 },
+  { label: 'RFC drafts', kind: 'file', depth: 2, active: 1 },
   { label: 'Archive', kind: 'folder', depth: 0 },
   { label: 'Q1 planning', kind: 'file', depth: 1 },
   { label: 'Incident 4402', kind: 'file', depth: 1 },
@@ -215,29 +243,56 @@ interface App {
   /** Current document's blocks — replaced when the selected doc switches. */
   skels: HTMLElement[];
   chips: HTMLElement[];
+  /** Chips revealed only in Act IV, as teammates' agents fill the shared doc. */
+  lateChips: HTMLElement[];
   readonly termPanel: HTMLElement;
   readonly termCmd: HTMLElement;
   readonly termBody: HTMLElement;
+  // Act IV presence layer.
+  readonly avatars: HTMLElement[];
+  readonly cursors: Cursor[];
+  readonly activityDots: HTMLElement[];
+}
+
+/** A teammate's live cursor: an element that glides from off-screen to a rest spot. */
+interface Cursor {
+  readonly el: HTMLElement;
+  readonly x: number;
+  readonly y: number;
 }
 
 /**
  * Fill the document pane with a doc's blocks, replacing whatever was there. The
  * title element is kept; only the blocks below it are rebuilt.
  */
-function fillDoc(docPanel: HTMLElement, docTitle: HTMLElement, doc: Doc): Pick<App, 'skels' | 'chips'> {
+function fillDoc(
+  docPanel: HTMLElement,
+  docTitle: HTMLElement,
+  doc: Doc,
+): Pick<App, 'skels' | 'chips' | 'lateChips'> {
   while (docPanel.lastChild && docPanel.lastChild !== docTitle) docPanel.removeChild(docPanel.lastChild);
   docTitle.textContent = doc.title;
 
   const skels: HTMLElement[] = [];
   const chips: HTMLElement[] = [];
+  const lateChips: HTMLElement[] = [];
   for (const block of doc.blocks) {
     if (block.kind === 'chip') {
       const el = document.createElement('div');
       el.className = 'chip chip--doc';
       el.innerHTML = '<span class="chip__dot"></span><span class="chip__label"></span>';
       el.querySelector<HTMLElement>('.chip__label')!.textContent = block.session.cmd;
+      // An agent someone else launched carries their avatar.
+      if (block.owner !== undefined) {
+        const mate = TEAM[block.owner]!;
+        const badge = document.createElement('span');
+        badge.className = 'chip__owner';
+        badge.textContent = mate.initial;
+        badge.style.background = mate.color;
+        el.append(badge);
+      }
       docPanel.append(el);
-      chips.push(el);
+      (block.late ? lateChips : chips).push(el);
     } else {
       const el = document.createElement('div');
       el.className = `skel skel--${block.kind}`;
@@ -245,7 +300,7 @@ function fillDoc(docPanel: HTMLElement, docTitle: HTMLElement, doc: Doc): Pick<A
       skels.push(el);
     }
   }
-  return { skels, chips };
+  return { skels, chips, lateChips };
 }
 
 /** Build a session's lines into the terminal. How many show is set per-frame by
@@ -279,6 +334,7 @@ function buildApp(): App {
   const sidebar = document.createElement('div');
   sidebar.className = 'app__sidebar';
   const docRows: (HTMLElement | null)[] = [];
+  const activityDots: HTMLElement[] = [];
   let docIndex = 0;
   for (const node of TREE) {
     const row = document.createElement('div');
@@ -289,8 +345,18 @@ function buildApp(): App {
     icon.className = 'app__row-icon';
     icon.textContent = node.kind === 'folder' ? '▾' : '·';
     const label = document.createElement('span');
+    label.className = 'app__row-label';
     label.textContent = node.label;
     row.append(icon, label);
+
+    // A teammate working in this doc — a colored presence dot, revealed in Act IV.
+    if (node.active !== undefined) {
+      const dot = document.createElement('span');
+      dot.className = 'app__row-active';
+      dot.style.background = TEAM[node.active]!.color;
+      row.append(dot);
+      activityDots.push(dot);
+    }
 
     sidebar.append(row);
     if (node.kind === 'doc') {
@@ -305,7 +371,7 @@ function buildApp(): App {
   const docTitle = document.createElement('div');
   docTitle.className = 'app__doc-title';
   docPanel.append(docTitle);
-  const { skels, chips } = fillDoc(docPanel, docTitle, DOCS[0]!);
+  const { skels, chips, lateChips } = fillDoc(docPanel, docTitle, DOCS[0]!);
 
   // Right pane: the selected terminal. Its own border lets it stand alone at first.
   const termPanel = document.createElement('div');
@@ -323,9 +389,43 @@ function buildApp(): App {
 
   body.append(sidebar, docPanel, termPanel);
   root.append(frame, body);
+
+  // Act IV presence: teammate avatars in the title bar, live cursors over the app.
+  const avatarRow = document.createElement('div');
+  avatarRow.className = 'app__avatars';
+  const avatars = TEAM.map((mate) => {
+    const el = document.createElement('span');
+    el.className = 'app__avatar';
+    el.textContent = mate.initial;
+    el.style.background = mate.color;
+    avatarRow.append(el);
+    return el;
+  });
+  frame.querySelector<HTMLElement>('.app__titlebar')!.append(avatarRow);
+
+  // Rest spots over the document pane (percent of the app), where teammates read.
+  const cursorRests: ReadonlyArray<{ x: number; y: number }> = [
+    { x: 40, y: 32 },
+    { x: 52, y: 56 },
+    { x: 30, y: 72 },
+  ];
+  const cursors = cursorRests.map((rest, i) => {
+    const mate = TEAM[i]!;
+    const el = document.createElement('div');
+    el.className = 'cursor';
+    el.style.color = mate.color;
+    el.innerHTML =
+      '<svg class="cursor__arrow" viewBox="0 0 12 12" width="14" height="14">' +
+      '<path d="M1 1l9.5 4-4 1.4L5 11 1 1z" fill="currentColor" stroke="#000" stroke-width="0.6"/></svg>' +
+      `<span class="cursor__tag">${mate.initial}</span>`;
+    root.append(el);
+    return { el, x: rest.x, y: rest.y };
+  });
+
   return {
     root, frame, termFrame, sidebar, docRows, docPanel, docTitle,
-    skels, chips, termPanel, termCmd, termBody,
+    skels, chips, lateChips, termPanel, termCmd, termBody,
+    avatars, cursors, activityDots,
   };
 }
 
@@ -481,6 +581,7 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       const built = fillDoc(app.docPanel, app.docTitle, DOCS[selectedDoc]!);
       app.skels = built.skels;
       app.chips = built.chips;
+      app.lateChips = built.lateChips;
       for (let i = 0; i < app.docRows.length; i += 1) {
         app.docRows[i]?.classList.toggle('is-active', i === selectedDoc);
       }
@@ -513,6 +614,34 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       paintedTermShown = shown;
       app.termBody.style.setProperty('--shown', String(shown));
       app.termBody.scrollTop = app.termBody.scrollHeight;
+    }
+
+    // --- Act IV: multiuser -----------------------------------------------------
+    // On the held final frame, a presence layer builds: teammates join the title
+    // bar, their cursors arrive, and the shared doc fills with their agents.
+    const avatarsP = span(p, T4.avatarsStart, T4.avatarsEnd);
+    const cursorsP = span(p, T4.cursorsStart, T4.cursorsEnd);
+    const densifyP = span(p, T4.densifyStart, T4.densifyEnd);
+
+    for (let i = 0; i < app.avatars.length; i += 1) {
+      const a = easeOut(clamp01((avatarsP - i * 0.12) / 0.5));
+      app.avatars[i]!.style.opacity = String(a);
+      app.avatars[i]!.style.transform = `scale(${lerp(0.5, 1, a)})`;
+    }
+
+    for (let i = 0; i < app.cursors.length; i += 1) {
+      const c = app.cursors[i]!;
+      const t = easeOut(clamp01((cursorsP - i * 0.14) / 0.55));
+      c.el.style.opacity = String(clamp01(t * 3));
+      const fromX = c.x < 50 ? -8 : 108;
+      c.el.style.left = `${lerp(fromX, c.x, t)}%`;
+      c.el.style.top = `${lerp(c.y + 8, c.y, t)}%`;
+    }
+
+    for (const dot of app.activityDots) dot.style.opacity = String(cursorsP);
+
+    for (let i = 0; i < app.lateChips.length; i += 1) {
+      app.lateChips[i]!.style.opacity = String(easeOut(clamp01((densifyP - i * 0.25) / 0.6)));
     }
   };
 }

@@ -21,16 +21,27 @@ export const ACTS = {
 } as const;
 
 /**
- * Act III gets far more scroll than its share of the semantic timeline: Acts I–II
- * occupy the first ACT12_SCROLL of the page, Act III the rest. `remapScroll` turns
- * a raw scroll fraction into the semantic progress the film is authored against,
- * so the acts keep their tuning while Act III has room to breathe.
+ * Semantic progress the film is authored against. Acts I–III live in [0, 1]; Act IV
+ * (the multiuser payoff) is authored past the end, in [1, SEMANTIC_MAX], so the
+ * earlier acts finish and simply hold their last frame beneath it.
  */
-export const ACT12_SCROLL = 0.56;
+export const ACT4_SPAN = 0.25;
+export const SEMANTIC_MAX = ACTS.docEnd + ACT4_SPAN;
+
+/**
+ * Each act gets a slice of raw scroll independent of its share of the semantic
+ * timeline, so all four keep their own pacing. `remapScroll` turns a raw scroll
+ * fraction (0–1) into semantic progress (0–SEMANTIC_MAX).
+ */
+export const ACT12_SCROLL = 0.43;
+export const ACT3_SCROLL = 0.77;
 
 export function remapScroll(rawP: number): number {
   if (rawP < ACT12_SCROLL) return (rawP / ACT12_SCROLL) * ACTS.docStart;
-  return ACTS.docStart + ((rawP - ACT12_SCROLL) / (1 - ACT12_SCROLL)) * (1 - ACTS.docStart);
+  if (rawP < ACT3_SCROLL) {
+    return ACTS.docStart + ((rawP - ACT12_SCROLL) / (ACT3_SCROLL - ACT12_SCROLL)) * (ACTS.docEnd - ACTS.docStart);
+  }
+  return ACTS.docEnd + ((rawP - ACT3_SCROLL) / (1 - ACT3_SCROLL)) * ACT4_SPAN;
 }
 
 /**
@@ -54,6 +65,20 @@ export const T3 = {
   docSwitchEnd: 1.0,
   /** Semantic scroll per revealed terminal line — the fill rate of every Act III terminal. */
   fillPace: 0.0011,
+} as const;
+
+/**
+ * Act IV beats, authored past the end of the timeline. On the held final frame of
+ * Act III a presence layer builds: teammates join, cursors arrive, and the shared
+ * document fills with their agents — Act I's density, now ordered.
+ */
+export const T4 = {
+  avatarsStart: 1.0,
+  avatarsEnd: 1.06,
+  cursorsStart: 1.05,
+  cursorsEnd: 1.14,
+  densifyStart: 1.1,
+  densifyEnd: 1.22,
 } as const;
 
 export const TERMINAL_COUNT = 34;
