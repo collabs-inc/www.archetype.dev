@@ -180,6 +180,8 @@ body {
 .trash svg {
   display: block;
   width: 100%;
+  /* The open lid swings above the viewBox — don't clip it at the SVG viewport. */
+  overflow: visible;
   /* A soft dark halo so the white outline stays legible over the busy crowd. */
   filter: drop-shadow(0 2px 18px rgba(0, 0, 0, 0.6));
 }

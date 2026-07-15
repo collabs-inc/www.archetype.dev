@@ -346,12 +346,12 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
   // A classic outlined can: handle, lid, tapered body, three ribs. The lid is its
   // own group so it can swing open while the body stays put.
   trash.innerHTML =
-    '<svg viewBox="0 0 64 78" fill="none" stroke="#fff" stroke-width="3" ' +
+    '<svg viewBox="0 0 64 62" fill="none" stroke="#fff" stroke-width="3" ' +
     'stroke-linecap="round" stroke-linejoin="round">' +
-    '<g class="trash__lid"><path d="M24 9V7.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3V9"/>' +
-    '<path d="M9 9h46"/></g>' +
-    '<path d="M14.5 16 18 68a4.5 4.5 0 0 0 4.5 4h19a4.5 4.5 0 0 0 4.5-4L49.5 16"/>' +
-    '<path d="M24 26l1.6 38M32 26v38M40 26l-1.6 38"/>' +
+    '<g class="trash__lid"><path d="M24 10V8.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3V10"/>' +
+    '<path d="M9 10h46"/></g>' +
+    '<path d="M14.5 17 17.5 54a4.5 4.5 0 0 0 4.5 4h20a4.5 4.5 0 0 0 4.5-4L49.5 17"/>' +
+    '<path d="M24.5 25l1.2 24M32 25v24M39.5 25l-1.2 24"/>' +
     '</svg>';
   const lid = trash.querySelector<HTMLElement>('.trash__lid')!;
 
@@ -504,7 +504,12 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       paintedTermShown = -1;
       paintTerm(app.termCmd, app.termBody, session);
     }
-    const shown = Math.max(0, Math.min(session.lines.length, Math.floor((p - viewStart) / T3.fillPace)));
+    // Only the first doc's terminals stream in; docs switched to afterward show
+    // their terminal already full.
+    const shown =
+      selectedDoc === 0
+        ? Math.max(0, Math.min(session.lines.length, Math.floor((p - viewStart) / T3.fillPace)))
+        : session.lines.length;
     if (shown !== paintedTermShown) {
       paintedTermShown = shown;
       app.termBody.style.setProperty('--shown', String(shown));
