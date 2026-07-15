@@ -422,17 +422,16 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
     }
 
     // --- The trash -------------------------------------------------------------
-    // The can rises into place just before the purge, then the lid swings open to
-    // take the crowd, and the whole thing leaves once the screen is clear.
-    const trashIn = easeOut(span(p, ACTS.purgeStart - 0.05, ACTS.purgeStart));
-    const trashOut = span(p, ACTS.purgeEnd + 0.01, ACTS.emptyEnd);
+    // The can fades in just before the purge, the lid swings open to take the
+    // crowd, then shuts again once the last window is in, and the closed can
+    // fades away — leaving the screen empty for a beat before Act III arrives.
+    const trashIn = span(p, ACTS.purgeStart - 0.02, ACTS.purgeStart);
+    const trashOut = span(p, ACTS.purgeEnd + 0.005, ACTS.emptyStart);
     const lidOpen = easeOut(span(p, ACTS.purgeStart - 0.02, ACTS.purgeStart + 0.05));
-    const shake = Math.sin(p * 400) * 1.5 * (trashIn - trashOut);
+    const lidShut = easeInOut(span(p, ACTS.purgeEnd, ACTS.purgeEnd + 0.015));
+    const openness = lidOpen * (1 - lidShut);
     trash.style.opacity = String(trashIn * (1 - trashOut));
-    trash.style.transform =
-      `translate3d(-50%, -50%, 0) translateY(${lerp(30, 0, trashIn)}px) ` +
-      `rotate(${shake}deg) scale(${lerp(0.8, 1, trashIn)})`;
-    lid.style.transform = `rotate(${lerp(0, -122, lidOpen)}deg) translateY(${lerp(0, -1, lidOpen)}px)`;
+    lid.style.transform = `rotate(${openness * -122}deg) translateY(${openness * -1}px)`;
 
     // --- Act III: the product assembles ----------------------------------------
     app.root.style.opacity = String(clamp01(span(p, ACTS.docStart, ACTS.docStart + 0.004)));

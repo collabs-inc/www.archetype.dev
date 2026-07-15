@@ -13,7 +13,8 @@ export const ACTS = {
   /** Act II: everything goes in the trash, then a held beat of nothing. */
   purgeStart: 0.66,
   purgeEnd: 0.76,
-  emptyEnd: 0.8,
+  /** The can is gone by here; the screen stays empty until Act III at docStart. */
+  emptyStart: 0.78,
   /** Act III: the three-pane product assembles itself, one panel at a time. */
   docStart: 0.8,
   docEnd: 1.0,
@@ -72,12 +73,19 @@ export const HERO = {
   typeStart: 0.012,
   typeEnd: 0.05,
   runStart: 0.06,
-  /** Scroll distance per line of hero output. */
-  linePace: 0.018,
+  /**
+   * Scroll distance per line of hero output. Brisker than the crowd's LINE_PACE:
+   * the hero runs its whole session (21 lines, done ≈0.165) while it's alone on
+   * screen, so the reader sees one complete job before the pile-on starts.
+   */
+  linePace: 0.005,
 } as const;
 
-/** The rest of the terminals hold off until the hero has had its moment. */
-export const CROWD_START = 0.12;
+/**
+ * The rest of the terminals hold off until the hero has finished printing
+ * (≈0.165), plus a held beat with the finished session alone on screen.
+ */
+export const CROWD_START = 0.19;
 
 /**
  * The first arrivals land in a ring of slots around the hero, none of them
@@ -98,8 +106,13 @@ export const GRID_SLOTS = [
 /** Each ring slot is nudged off its exact mark so the grid never looks ruled. */
 export const GRID_JITTER = { x: 2, y: 1.5 } as const;
 
-/** Where the orderly phase ends and windows start landing on top of each other. */
-export const GRID_END = 0.33;
+/**
+ * Each arrival's gap to the next is this fraction of the gap before it. The
+ * first gap comes out to ~0.054 — three lines of output — so the 2nd, 3rd, 4th
+ * terminals each get a visible stretch of work in before the next one lands;
+ * by the pile the gaps have shrunk to nearly nothing and it's a flood.
+ */
+export const SPAWN_DECAY = 0.8;
 
 /**
  * Scroll distance per line of crowd output. Paced so an agent that arrives early
@@ -143,19 +156,14 @@ export function mulberry32(seed: number): () => number {
 }
 
 /**
- * When terminal `i` appears. The first few are spaced out and readable; the
- * rest pile on with accelerating frequency, so the mess outruns the reader.
+ * When terminal `i` appears. Gaps between arrivals decay geometrically from
+ * CROWD_START to just before the hold: the first few are spaced out and
+ * readable, and the acceleration never lets up, so the mess gradually and
+ * then completely outruns the reader.
  */
 export function spawnPoint(i: number, count: number): number {
   if (i === 0) return FIRST_SPAWN;
 
-  // The ring: one window at a time, evenly spaced, with room to read each one.
-  if (i <= GRID_SLOTS.length) {
-    return lerp(CROWD_START, GRID_END, (i - 1) / GRID_SLOTS.length);
-  }
-
-  // The pile: gaps shrink as it goes, so arrivals accelerate into a flood.
-  const first = GRID_SLOTS.length + 1;
-  const t = (i - first) / (count - 1 - first);
-  return lerp(GRID_END, ACTS.accretionEnd - 0.02, t ** 0.7);
+  const frac = (1 - SPAWN_DECAY ** (i - 1)) / (1 - SPAWN_DECAY ** (count - 1));
+  return lerp(CROWD_START, ACTS.accretionEnd - 0.02, frac);
 }
