@@ -66,6 +66,7 @@ function buildTerminal(i: number, rnd: () => number): Term {
   const hero = i === 0;
   const session = hero ? HERO_SESSION : SESSIONS[i % SESSIONS.length]!;
   const { x, y } = scatter(i, rnd);
+  const spawn = spawnPoint(i, TERMINAL_COUNT);
 
   const el = document.createElement('div');
   el.className = 'term';
@@ -102,13 +103,16 @@ function buildTerminal(i: number, rnd: () => number): Term {
 
   const caret = document.createElement('div');
   caret.className = 'term__caret';
+  // Phase the blink by when the window opened (film progress read as seconds of
+  // wall time), so the crowd's carets don't all pulse in unison.
+  caret.style.animationDelay = `${(-spawn * 60).toFixed(2)}s`;
   body.append(caret);
 
   el.append(bar, body);
   return {
     el,
     body,
-    spawn: spawnPoint(i, TERMINAL_COUNT),
+    spawn,
     x,
     y,
     lineCount: session.lines.length,
@@ -118,63 +122,130 @@ function buildTerminal(i: number, rnd: () => number): Term {
   };
 }
 
-/** A document in the product: a title, and the agent sessions that live inside it. */
+/** A block in a document: a run of prose (skeleton) or an agent chip. */
+type Block = { readonly kind: 'h' | 'p' | 'p-short' } | { readonly kind: 'chip'; readonly session: Session };
+
+/** A document in the product: a title and an ordered list of blocks. */
 interface Doc {
   readonly title: string;
-  readonly chips: readonly Session[];
+  readonly blocks: readonly Block[];
 }
 
-/** The docs Act III moves through. The first holds the hero session from the film. */
+const para = { kind: 'p' } as const;
+const paraShort = { kind: 'p-short' } as const;
+const head = { kind: 'h' } as const;
+const agentBlock = (session: Session): Block => ({ kind: 'chip', session });
+
+/**
+ * The docs Act III moves through, each a different shape: the first holds the hero
+ * session and has exactly three chips (the ones the chip-cycle steps through); the
+ * others vary in length and chip count, and the last runs long enough to overflow.
+ */
 const DOCS: readonly Doc[] = [
-  { title: 'Auth rewrite', chips: [HERO_SESSION, SESSIONS[0]!, SESSIONS[1]!] },
-  { title: 'Dependency upgrade', chips: [SESSIONS[2]!, SESSIONS[3]!, SESSIONS[4]!] },
-  { title: 'Platform migration', chips: [SESSIONS[8]!, SESSIONS[5]!, SESSIONS[10]!] },
+  {
+    title: 'Auth rewrite',
+    blocks: [
+      head, para, para, agentBlock(HERO_SESSION), paraShort, para,
+      agentBlock(SESSIONS[0]!), para, para, agentBlock(SESSIONS[1]!), paraShort,
+    ],
+  },
+  {
+    title: 'Dependency upgrade',
+    blocks: [para, paraShort, agentBlock(SESSIONS[2]!), para, agentBlock(SESSIONS[3]!), paraShort],
+  },
+  {
+    title: 'Platform migration',
+    blocks: [
+      head, para, para, para, agentBlock(SESSIONS[8]!), paraShort, para,
+      agentBlock(SESSIONS[5]!), para, agentBlock(SESSIONS[4]!), para, para, head, para,
+      agentBlock(SESSIONS[10]!), paraShort, para, agentBlock(SESSIONS[6]!), para, paraShort,
+    ],
+  },
 ];
 
-/** The document tree in the sidebar. Section headers, then the switchable docs. */
-const TREE: ReadonlyArray<{ label: string; kind: 'header' | 'doc' | 'muted' }> = [
-  { label: 'PROJECTS', kind: 'header' },
-  { label: DOCS[0]!.title, kind: 'doc' },
-  { label: DOCS[1]!.title, kind: 'doc' },
-  { label: DOCS[2]!.title, kind: 'doc' },
-  { label: 'ARCHIVE', kind: 'header' },
-  { label: 'Q1 planning', kind: 'muted' },
-  { label: 'Incident 4402', kind: 'muted' },
+/** Each doc's chip sessions, in order — what the right-hand terminal shows. */
+const DOC_SESSIONS: readonly (readonly Session[])[] = DOCS.map((d) =>
+  d.blocks.flatMap((b) => (b.kind === 'chip' ? [b.session] : [])),
+);
+
+/**
+ * The document tree in the sidebar. Folders nest files; the three `doc` rows are
+ * the only ones the doc-switch beat scrubs through, but the tree is deep so the
+ * product reads as a real workspace, not a three-item list.
+ */
+interface TreeNode {
+  readonly label: string;
+  readonly kind: 'folder' | 'doc' | 'file';
+  readonly depth: number;
+}
+
+const TREE: readonly TreeNode[] = [
+  { label: 'Workspace', kind: 'folder', depth: 0 },
+  // The three docs we scrub through are siblings in this one branch.
+  { label: 'Projects', kind: 'folder', depth: 1 },
+  { label: DOCS[0]!.title, kind: 'doc', depth: 2 },
+  { label: DOCS[1]!.title, kind: 'doc', depth: 2 },
+  { label: DOCS[2]!.title, kind: 'doc', depth: 2 },
+  { label: 'Search indexing', kind: 'file', depth: 2 },
+  { label: 'Realtime sync', kind: 'file', depth: 2 },
+  { label: 'Notes', kind: 'folder', depth: 1 },
+  { label: 'Architecture', kind: 'file', depth: 2 },
+  { label: 'On-call runbook', kind: 'file', depth: 2 },
+  { label: 'RFC drafts', kind: 'file', depth: 2 },
+  { label: 'Archive', kind: 'folder', depth: 0 },
+  { label: 'Q1 planning', kind: 'file', depth: 1 },
+  { label: 'Incident 4402', kind: 'file', depth: 1 },
+  { label: 'Deprecations', kind: 'file', depth: 1 },
 ];
 
-/** How many agent chips each doc shows. All docs share this layout so switching is clean. */
-const CHIPS_PER_DOC = 3;
+/** Chips in the first doc — the ones the chip-cycle beat steps through. */
+const CHIPS_PER_DOC = DOC_SESSIONS[0]!.length;
 
 interface App {
   readonly root: HTMLElement;
   readonly sidebar: HTMLElement;
-  /** Sidebar rows, indexed to match DOCS (headers/muted rows are null). */
+  /** Sidebar rows for the switchable docs, in DOCS order (folder/file rows excluded). */
   readonly docRows: (HTMLElement | null)[];
+  /** The window shell — title bar, border, background — that unites the panes. */
+  readonly frame: HTMLElement;
+  /** The terminal's own border, shown while it stands alone and faded as the shell arrives. */
+  readonly termFrame: HTMLElement;
   readonly docPanel: HTMLElement;
-  /** The panel's frame — background/border/shadow — revealed after the first chip. */
-  readonly docBg: HTMLElement;
   readonly docTitle: HTMLElement;
-  readonly skels: HTMLElement[];
-  readonly chips: HTMLElement[];
-  readonly chipLabels: HTMLElement[];
+  /** Current document's blocks — replaced when the selected doc switches. */
+  skels: HTMLElement[];
+  chips: HTMLElement[];
   readonly termPanel: HTMLElement;
   readonly termCmd: HTMLElement;
   readonly termBody: HTMLElement;
 }
 
-/** One terminal window's worth of markup, filled by `paintTerm`. */
-function buildTermPanel(): { panel: HTMLElement; cmd: HTMLElement; body: HTMLElement } {
-  const panel = document.createElement('div');
-  panel.className = 'app__term';
-  panel.innerHTML =
-    '<div class="term__bar"><span></span><span></span><span></span></div>' +
-    '<div class="app__term-body"><div class="term__cmd"></div><div class="app__term-lines"></div>' +
-    '<div class="term__caret"></div></div>';
-  return {
-    panel,
-    cmd: panel.querySelector<HTMLElement>('.term__cmd')!,
-    body: panel.querySelector<HTMLElement>('.app__term-lines')!,
-  };
+/**
+ * Fill the document pane with a doc's blocks, replacing whatever was there. The
+ * title element is kept; only the blocks below it are rebuilt.
+ */
+function fillDoc(docPanel: HTMLElement, docTitle: HTMLElement, doc: Doc): Pick<App, 'skels' | 'chips'> {
+  while (docPanel.lastChild && docPanel.lastChild !== docTitle) docPanel.removeChild(docPanel.lastChild);
+  docTitle.textContent = doc.title;
+
+  const skels: HTMLElement[] = [];
+  const chips: HTMLElement[] = [];
+  for (const block of doc.blocks) {
+    if (block.kind === 'chip') {
+      const el = document.createElement('div');
+      el.className = 'chip chip--doc';
+      el.innerHTML = '<span class="chip__dot"></span><span class="chip__label"></span>';
+      el.querySelector<HTMLElement>('.chip__label')!.textContent = block.session.cmd;
+      docPanel.append(el);
+      chips.push(el);
+    } else {
+      const el = document.createElement('div');
+      el.className = `skel skel--${block.kind}`;
+      docPanel.append(el);
+      skels.push(el);
+    }
+  }
+  return { skels, chips };
 }
 
 /** Print a session into the right-hand terminal: prompt, every line, last one active. */
@@ -193,12 +264,20 @@ function paintTerm(cmd: HTMLElement, lines: HTMLElement, session: Session): void
   lines.scrollTop = lines.scrollHeight;
 }
 
-/** Build the three-pane app: sidebar tree, center document, right terminal. */
+/** Build the three-pane app: one window shell, with sidebar, document, terminal inside. */
 function buildApp(): App {
   const root = document.createElement('div');
   root.className = 'app';
 
-  // Sidebar
+  // The window shell: title bar with traffic lights, plus the frame's border/bg.
+  const frame = document.createElement('div');
+  frame.className = 'app__frame';
+  frame.innerHTML = '<div class="app__titlebar"><span></span><span></span><span></span></div>';
+
+  const body = document.createElement('div');
+  body.className = 'app__body';
+
+  // Left pane: the document tree
   const sidebar = document.createElement('div');
   sidebar.className = 'app__sidebar';
   const docRows: (HTMLElement | null)[] = [];
@@ -206,7 +285,15 @@ function buildApp(): App {
   for (const node of TREE) {
     const row = document.createElement('div');
     row.className = `app__row app__row--${node.kind}`;
-    row.textContent = node.label;
+    row.style.paddingLeft = `${10 + node.depth * 15}px`;
+
+    const icon = document.createElement('span');
+    icon.className = 'app__row-icon';
+    icon.textContent = node.kind === 'folder' ? '▾' : '·';
+    const label = document.createElement('span');
+    label.textContent = node.label;
+    row.append(icon, label);
+
     sidebar.append(row);
     if (node.kind === 'doc') {
       docRows[docIndex] = row;
@@ -214,49 +301,33 @@ function buildApp(): App {
     }
   }
 
-  // Center document. The frame is a separate layer so the first chip can float
-  // in the center before the document around it is revealed.
+  // Center pane: the selected document
   const docPanel = document.createElement('div');
   docPanel.className = 'app__doc';
-  const docBg = document.createElement('div');
-  docBg.className = 'app__doc-bg';
-  docPanel.append(docBg);
   const docTitle = document.createElement('div');
   docTitle.className = 'app__doc-title';
-  docTitle.textContent = DOCS[0]!.title;
   docPanel.append(docTitle);
+  const { skels, chips } = fillDoc(docPanel, docTitle, DOCS[0]!);
 
-  const layout: ReadonlyArray<'p' | 'p-short' | 'chip'> = [
-    'p', 'p', 'chip', 'p-short', 'p', 'chip', 'p', 'chip', 'p-short',
-  ];
-  const skels: HTMLElement[] = [];
-  const chips: HTMLElement[] = [];
-  const chipLabels: HTMLElement[] = [];
-  for (const kind of layout) {
-    if (kind === 'chip') {
-      const chip = document.createElement('div');
-      chip.className = 'chip chip--doc';
-      chip.innerHTML = '<span class="chip__dot"></span><span class="chip__label"></span>';
-      const label = chip.querySelector<HTMLElement>('.chip__label')!;
-      label.textContent = DOCS[0]!.chips[chips.length]!.cmd;
-      docPanel.append(chip);
-      chips.push(chip);
-      chipLabels.push(label);
-    } else {
-      const skel = document.createElement('div');
-      skel.className = `skel skel--${kind}`;
-      docPanel.append(skel);
-      skels.push(skel);
-    }
-  }
+  // Right pane: the selected terminal. Its own border lets it stand alone at first.
+  const termPanel = document.createElement('div');
+  termPanel.className = 'app__term';
+  const termFrame = document.createElement('div');
+  termFrame.className = 'app__term-frame';
+  const termBodyWrap = document.createElement('div');
+  termBodyWrap.className = 'app__term-body';
+  termBodyWrap.innerHTML =
+    '<div class="term__cmd"></div><div class="app__term-lines"></div><div class="term__caret"></div>';
+  termPanel.append(termFrame, termBodyWrap);
+  const termCmd = termBodyWrap.querySelector<HTMLElement>('.term__cmd')!;
+  const termBody = termBodyWrap.querySelector<HTMLElement>('.app__term-lines')!;
+  paintTerm(termCmd, termBody, DOC_SESSIONS[0]![0]!);
 
-  const { panel: termPanel, cmd: termCmd, body: termBody } = buildTermPanel();
-  paintTerm(termCmd, termBody, DOCS[0]!.chips[0]!);
-
-  root.append(sidebar, docPanel, termPanel);
+  body.append(sidebar, docPanel, termPanel);
+  root.append(frame, body);
   return {
-    root, sidebar, docRows, docPanel, docBg, docTitle,
-    skels, chips, chipLabels, termPanel, termCmd, termBody,
+    root, frame, termFrame, sidebar, docRows, docPanel, docTitle,
+    skels, chips, termPanel, termCmd, termBody,
   };
 }
 
@@ -357,21 +428,21 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
     // --- Act III: the product assembles ----------------------------------------
     app.root.style.opacity = String(clamp01(span(p, ACTS.docStart, ACTS.docStart + 0.004)));
 
-    // Panels reveal outward from the familiar terminal: term + its lone chip, then
-    // the document frame around it, then the sidebar.
+    // Reveal outward from the familiar terminal: the lone terminal and its chip,
+    // then the window shell + document around them, then the sidebar.
     const termIn = easeOut(span(p, T3.termInStart, T3.termInEnd));
     const docIn = easeOut(span(p, T3.docInStart, T3.docInEnd));
     const sideIn = easeOut(span(p, T3.sideInStart, T3.sideInEnd));
 
+    // The window shell arrives with the sidebar, wrapping the already-floating
+    // terminal and document into one app; the terminal's own border fades out as
+    // it stops being a lone window and becomes the right pane.
+    app.frame.style.opacity = String(sideIn);
+    app.termFrame.style.opacity = String(1 - sideIn);
+    app.root.style.setProperty('--frame', String(sideIn));
+
     app.termPanel.style.opacity = String(termIn);
     app.sidebar.style.opacity = String(sideIn);
-    app.docBg.style.opacity = String(docIn);
-    app.docTitle.style.opacity = String(docIn);
-    for (const skel of app.skels) skel.style.opacity = String(docIn);
-    for (let i = 0; i < app.chips.length; i += 1) {
-      // The first chip arrives with the terminal; the rest with the document.
-      app.chips[i]!.style.opacity = String(i === 0 ? Math.max(termIn, docIn) : docIn);
-    }
 
     // Which document, and which chip within it, is selected.
     let selectedDoc = 0;
@@ -388,25 +459,32 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
     } else {
       selectedChip = 0;
     }
+    selectedChip = Math.min(selectedChip, DOC_SESSIONS[selectedDoc]!.length - 1);
 
+    // Rebuild the center pane when the selected doc changes — each doc is a
+    // different shape, so it's a fresh block list, not a text swap.
     if (selectedDoc !== paintedDoc) {
       paintedDoc = selectedDoc;
-      const d = DOCS[selectedDoc]!;
-      app.docTitle.textContent = d.title;
-      for (let i = 0; i < app.chipLabels.length; i += 1) app.chipLabels[i]!.textContent = d.chips[i]!.cmd;
+      const built = fillDoc(app.docPanel, app.docTitle, DOCS[selectedDoc]!);
+      app.skels = built.skels;
+      app.chips = built.chips;
       for (let i = 0; i < app.docRows.length; i += 1) {
         app.docRows[i]?.classList.toggle('is-active', i === selectedDoc);
       }
     }
 
+    app.docTitle.style.opacity = String(docIn);
+    for (const skel of app.skels) skel.style.opacity = String(docIn);
     for (let i = 0; i < app.chips.length; i += 1) {
+      // The first chip arrives with the terminal; the rest with the document.
+      app.chips[i]!.style.opacity = String(i === 0 ? Math.max(termIn, docIn) : docIn);
       app.chips[i]!.classList.toggle('is-selected', i === selectedChip);
     }
 
     const termKey = `${selectedDoc}:${selectedChip}`;
     if (termKey !== paintedTermKey) {
       paintedTermKey = termKey;
-      paintTerm(app.termCmd, app.termBody, DOCS[selectedDoc]!.chips[selectedChip]!);
+      paintTerm(app.termCmd, app.termBody, DOC_SESSIONS[selectedDoc]![selectedChip]!);
     }
   };
 }
