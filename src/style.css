@@ -28,7 +28,7 @@ body {
 
 /* ── The film ─────────────────────────────────────────────────────────────── */
 
-#film { height: 2100vh; position: relative; }
+#film { height: 2800vh; position: relative; }
 
 #stage {
   position: sticky;
@@ -195,57 +195,117 @@ body {
   box-shadow: inset 0 12px 22px -12px #000;
 }
 
-/* The document (Act III) */
-.world {
+/* ── Act III: the three-pane product ──────────────────────────────────────── */
+
+.app {
   position: absolute;
   left: 50%;
   top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: var(--gap, 0px);
+  gap: 18px;
+  width: min(1180px, 94vw);
+  height: 640px;
   opacity: 0;
-  will-change: transform, opacity;
+  will-change: opacity;
 }
 
-.doc {
-  width: 560px;
+/* Left: the document tree */
+.app__sidebar {
+  width: 224px;
   flex: none;
-  padding: 40px 44px;
+  padding: 18px 12px;
+  border-radius: 12px;
+  background: #0b0e12;
+  border: 1px solid var(--edge);
+  font-family: var(--sans);
+  font-size: 13px;
+  opacity: 0;
+  will-change: opacity;
+}
+
+.app__row {
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #c2ccd6;
+}
+
+.app__row--header {
+  margin: 16px 0 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #566069;
+}
+
+.app__row--header:first-child { margin-top: 0; }
+.app__row--muted { color: #5c6570; }
+.app__row.is-active { background: #16202b; color: #fff; }
+
+/* Center: the selected document */
+.app__doc {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 34px 40px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.app__doc-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   border-radius: 12px;
   background: #0c1015;
   border: 1px solid var(--edge);
   box-shadow: 0 40px 100px -40px #000;
+  opacity: 0;
+  will-change: opacity;
 }
 
-.doc--sibling { opacity: 0; transform: scale(0.94); }
+.app__doc-title {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 22px;
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  will-change: opacity;
+}
 
 .skel {
+  position: relative;
+  z-index: 1;
   height: 9px;
   border-radius: 4px;
   background: #1a212a;
-  margin: 12px 0;
-  will-change: transform, opacity;
+  margin: 14px 0;
+  will-change: opacity;
 }
 
-.skel--h { height: 15px; width: 46%; background: #2b3540; margin: 26px 0 16px; }
 .skel--p { width: 100%; }
 .skel--p-short { width: 62%; }
 
-/* An agent block, in a doc */
+/* An agent block inside a document */
 .chip {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 9px;
-  margin: 12px 0;
-  padding: 9px 12px;
+  margin: 16px 0;
+  padding: 10px 13px;
+  max-width: 340px;
   border-radius: 7px;
   background: #101720;
   border: 1px solid #232e3a;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: #9fb0c0;
-  will-change: transform, opacity;
+  will-change: opacity;
+  transition: border-color 0.2s linear, background 0.2s linear;
 }
 
 .chip__dot {
@@ -257,11 +317,49 @@ body {
   flex: none;
 }
 
-.chip--done .chip__dot { background: #4b5560; box-shadow: none; }
-.chip--idle .chip__dot { background: #d8a657; box-shadow: none; }
+/* The selected block — the one whose terminal is showing on the right. */
+.chip.is-selected {
+  border-color: color-mix(in oklab, var(--accent) 55%, #232e3a);
+  background: #101d19;
+  color: #d6e2dc;
+}
+
+/* Right: the selected terminal */
+.app__term {
+  width: 372px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  opacity: 0;
+  will-change: opacity;
+}
+
+.app__term-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--dim);
+}
+
+.app__term-lines {
+  --shown: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 
 @media (max-width: 720px) {
-  .doc { width: 88vw; padding: 24px; }
+  .app { flex-direction: column; height: auto; gap: 12px; }
+  .app__sidebar, .app__term { width: 100%; }
   .term { width: 300px; }
-  #film { height: 1500vh; }
+  #film { height: 2000vh; }
 }

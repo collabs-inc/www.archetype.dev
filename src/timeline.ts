@@ -14,10 +14,27 @@ export const ACTS = {
   purgeStart: 0.66,
   purgeEnd: 0.76,
   emptyEnd: 0.8,
-  /** Act III: the document builds, agents are born in place, camera pulls back. */
+  /** Act III: the three-pane product assembles itself, one panel at a time. */
   docStart: 0.8,
-  pullBackStart: 0.91,
   docEnd: 1.0,
+} as const;
+
+/**
+ * Act III beats, as absolute scroll fractions. The product is revealed from the
+ * one familiar thing outward: a terminal and its lone chip, then the document
+ * around it, then the chip↔terminal link, then the sidebar, then other docs.
+ */
+export const T3 = {
+  termInStart: 0.805,
+  termInEnd: 0.835,
+  docInStart: 0.845,
+  docInEnd: 0.875,
+  chipCycleStart: 0.885,
+  chipCycleEnd: 0.925,
+  sideInStart: 0.925,
+  sideInEnd: 0.95,
+  docSwitchStart: 0.955,
+  docSwitchEnd: 1.0,
 } as const;
 
 export const TERMINAL_COUNT = 34;
