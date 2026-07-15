@@ -248,7 +248,8 @@ function fillDoc(docPanel: HTMLElement, docTitle: HTMLElement, doc: Doc): Pick<A
   return { skels, chips };
 }
 
-/** Print a session into the right-hand terminal: prompt, every line, last one active. */
+/** Build a session's lines into the terminal. How many show is set per-frame by
+ *  the render loop, so the output can stream in on scroll like an Act I window. */
 function paintTerm(cmd: HTMLElement, lines: HTMLElement, session: Session): void {
   cmd.textContent = `$ ${session.cmd}`;
   lines.replaceChildren();
@@ -259,9 +260,6 @@ function paintTerm(cmd: HTMLElement, lines: HTMLElement, session: Session): void
     row.textContent = line;
     lines.append(row);
   });
-  // --shown = line count: every line is revealed, and the last one reads as active.
-  lines.style.setProperty('--shown', String(session.lines.length));
-  lines.scrollTop = lines.scrollHeight;
 }
 
 /** Build the three-pane app: one window shell, with sidebar, document, terminal inside. */
@@ -364,6 +362,7 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
   // Tracked so DOM only rewrites when the selection actually changes, not per frame.
   let paintedDoc = -1;
   let paintedTermKey = '';
+  let paintedTermShown = -1;
 
   return function render(p: number): void {
     // --- Act I + II: the crowd -------------------------------------------------
@@ -454,20 +453,25 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
     app.termPanel.style.opacity = String(termIn);
     app.sidebar.style.opacity = String(sideIn);
 
-    // Which document, and which chip within it, is selected.
+    // Which document and chip is selected, and where this terminal's view began —
+    // the point it starts streaming its output from.
     let selectedDoc = 0;
-    let selectedChip: number;
+    let selectedChip = 0;
+    let viewStart = T3.termFillStart;
     if (p >= T3.docSwitchStart) {
-      const step = span(p, T3.docSwitchStart, T3.docSwitchEnd) * DOCS.length;
-      selectedDoc = Math.min(DOCS.length - 1, Math.floor(step));
-      selectedChip = 0;
-    } else if (p >= T3.chipCycleEnd) {
-      selectedChip = CHIPS_PER_DOC - 1;
+      // Beat 5: switch through the other docs (the first was already shown).
+      const others = DOCS.length - 1;
+      const w = T3.docSwitchEnd - T3.docSwitchStart;
+      const k = Math.min(others - 1, Math.floor(span(p, T3.docSwitchStart, T3.docSwitchEnd) * others));
+      selectedDoc = 1 + k;
+      viewStart = T3.docSwitchStart + (k * w) / others;
     } else if (p >= T3.chipCycleStart) {
-      const step = span(p, T3.chipCycleStart, T3.chipCycleEnd) * CHIPS_PER_DOC;
-      selectedChip = Math.min(CHIPS_PER_DOC - 1, Math.floor(step));
-    } else {
-      selectedChip = 0;
+      // Beat 3: step through the first doc's other chips.
+      const others = CHIPS_PER_DOC - 1;
+      const w = T3.chipCycleEnd - T3.chipCycleStart;
+      const k = Math.min(others - 1, Math.floor(span(p, T3.chipCycleStart, T3.chipCycleEnd) * others));
+      selectedChip = 1 + k;
+      viewStart = T3.chipCycleStart + (k * w) / others;
     }
     selectedChip = Math.min(selectedChip, DOC_SESSIONS[selectedDoc]!.length - 1);
 
@@ -491,10 +495,20 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       app.chips[i]!.classList.toggle('is-selected', i === selectedChip);
     }
 
+    // Stream the selected terminal's output like an Act I window: rebuild on
+    // switch, then reveal lines as scroll passes its view start.
+    const session = DOC_SESSIONS[selectedDoc]![selectedChip]!;
     const termKey = `${selectedDoc}:${selectedChip}`;
     if (termKey !== paintedTermKey) {
       paintedTermKey = termKey;
-      paintTerm(app.termCmd, app.termBody, DOC_SESSIONS[selectedDoc]![selectedChip]!);
+      paintedTermShown = -1;
+      paintTerm(app.termCmd, app.termBody, session);
+    }
+    const shown = Math.max(0, Math.min(session.lines.length, Math.floor((p - viewStart) / T3.fillPace)));
+    if (shown !== paintedTermShown) {
+      paintedTermShown = shown;
+      app.termBody.style.setProperty('--shown', String(shown));
+      app.termBody.scrollTop = app.termBody.scrollHeight;
     }
   };
 }

@@ -28,7 +28,7 @@ body {
 
 /* ── The film ─────────────────────────────────────────────────────────────── */
 
-#film { height: 2800vh; position: relative; }
+#film { height: 4000vh; position: relative; }
 
 #stage {
   position: sticky;
@@ -170,7 +170,7 @@ body {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 84px;
+  width: 100px;
   /* Above the crowd (terminals run z-index 1..34) so the can is never buried. */
   z-index: 50;
   opacity: 0;
@@ -401,5 +401,5 @@ body {
 
 @media (max-width: 720px) {
   .app { height: auto; }
-  #film { height: 2000vh; }
+  #film { height: 2800vh; }
 }

@@ -1,6 +1,6 @@
 import './style.css';
 import { mountFilm } from './film';
-import { clamp01 } from './timeline';
+import { clamp01, remapScroll } from './timeline';
 
 const film = document.querySelector<HTMLElement>('#film')!;
 const stage = document.querySelector<HTMLElement>('#stage')!;
@@ -19,8 +19,8 @@ if (reduced) {
     ticking = false;
     const rect = film.getBoundingClientRect();
     const scrollable = film.offsetHeight - window.innerHeight;
-    const p = clamp01(-rect.top / Math.max(scrollable, 1));
-    render(p);
+    const rawP = clamp01(-rect.top / Math.max(scrollable, 1));
+    render(remapScroll(rawP));
   };
 
   const onScroll = (): void => {

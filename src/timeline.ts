@@ -20,21 +20,39 @@ export const ACTS = {
 } as const;
 
 /**
- * Act III beats, as absolute scroll fractions. The product is revealed from the
- * one familiar thing outward: a terminal and its lone chip, then the document
- * around it, then the chip↔terminal link, then the sidebar, then other docs.
+ * Act III gets far more scroll than its share of the semantic timeline: Acts I–II
+ * occupy the first ACT12_SCROLL of the page, Act III the rest. `remapScroll` turns
+ * a raw scroll fraction into the semantic progress the film is authored against,
+ * so the acts keep their tuning while Act III has room to breathe.
+ */
+export const ACT12_SCROLL = 0.56;
+
+export function remapScroll(rawP: number): number {
+  if (rawP < ACT12_SCROLL) return (rawP / ACT12_SCROLL) * ACTS.docStart;
+  return ACTS.docStart + ((rawP - ACT12_SCROLL) / (1 - ACT12_SCROLL)) * (1 - ACTS.docStart);
+}
+
+/**
+ * Act III beats, as semantic scroll fractions. The product is revealed from the
+ * one familiar thing outward: a terminal and its lone chip (the terminal streams
+ * its output like an Act I window), then the document around it, then the
+ * chip↔terminal link, then the sidebar, then other docs.
  */
 export const T3 = {
-  termInStart: 0.805,
-  termInEnd: 0.835,
-  docInStart: 0.845,
-  docInEnd: 0.875,
+  termInStart: 0.8,
+  termInEnd: 0.818,
+  /** The first terminal begins streaming its output here. */
+  termFillStart: 0.818,
+  docInStart: 0.855,
+  docInEnd: 0.885,
   chipCycleStart: 0.885,
-  chipCycleEnd: 0.925,
-  sideInStart: 0.925,
-  sideInEnd: 0.95,
+  chipCycleEnd: 0.94,
+  sideInStart: 0.94,
+  sideInEnd: 0.955,
   docSwitchStart: 0.955,
   docSwitchEnd: 1.0,
+  /** Semantic scroll per revealed terminal line — the fill rate of every Act III terminal. */
+  fillPace: 0.0011,
 } as const;
 
 export const TERMINAL_COUNT = 34;
