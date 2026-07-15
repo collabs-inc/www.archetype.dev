@@ -69,8 +69,10 @@ export const T3 = {
 
 /**
  * Act IV beats, authored past the end of the timeline. On the held final frame of
- * Act III a presence layer builds: teammates join, cursors arrive, and the shared
- * document fills with their agents — Act I's density, now ordered.
+ * Act III a presence layer pops in: teammates appear on other docs in the sidebar,
+ * read along in this doc's gutter (the `cursors` phase drives their hop between
+ * blocks), and the shared document fills with their agents — Act I's density, now
+ * ordered.
  */
 export const T4 = {
   avatarsStart: 1.0,

@@ -123,7 +123,7 @@ function buildTerminal(i: number, rnd: () => number): Term {
   };
 }
 
-/** The other people in the workspace, shown as colored avatars and cursors in Act IV. */
+/** The other people in the workspace, shown as colored presence avatars in Act IV. */
 interface Mate {
   readonly initial: string;
   readonly color: string;
@@ -142,21 +142,32 @@ const TEAM: readonly Mate[] = [
  */
 type Block =
   | { readonly kind: 'h' | 'p' | 'p-short' }
-  | { readonly kind: 'chip'; readonly session: Session; readonly owner?: number; readonly late?: boolean };
+  | { readonly kind: 'chip'; readonly session: Session; readonly late?: boolean };
 
-/** A document in the product: a title and an ordered list of blocks. */
+/**
+ * Teammate presence within a document: which teammate (owner), the blocks they
+ * read (visits, as indices into the doc's blocks), and whether they arrive only
+ * as the multiuser beat lands (late).
+ */
+interface Presence {
+  readonly owner: number;
+  readonly visits: readonly number[];
+  readonly late?: boolean;
+}
+
+/** A document in the product: a title, an ordered list of blocks, and who's here. */
 interface Doc {
   readonly title: string;
   readonly blocks: readonly Block[];
+  readonly presence?: readonly Presence[];
 }
 
 const para = { kind: 'p' } as const;
 const paraShort = { kind: 'p-short' } as const;
 const head = { kind: 'h' } as const;
-const agentBlock = (session: Session, owner?: number, late?: boolean): Block => ({
+const agentBlock = (session: Session, late?: boolean): Block => ({
   kind: 'chip',
   session,
-  ...(owner !== undefined ? { owner } : {}),
   ...(late !== undefined ? { late } : {}),
 });
 
@@ -179,12 +190,19 @@ const DOCS: readonly Doc[] = [
   },
   {
     // The shared doc of Act IV: your agent up top, teammates' agents below, and
-    // more of theirs (`late`) that fill in as the multiuser beat lands.
+    // more of theirs (`late`) that fill in as the multiuser beat lands. Teammates
+    // read along in the gutter (presence): two already here, two arriving late.
     title: 'Platform migration',
     blocks: [
       head, para, para, agentBlock(SESSIONS[8]!), paraShort, para,
-      agentBlock(SESSIONS[5]!, 0), para, agentBlock(SESSIONS[4]!, 1), para, paraShort,
-      agentBlock(SESSIONS[10]!, 2, true), agentBlock(SESSIONS[6]!, 3, true),
+      agentBlock(SESSIONS[5]!), para, agentBlock(SESSIONS[4]!), para, paraShort,
+      agentBlock(SESSIONS[10]!, true), agentBlock(SESSIONS[6]!, true),
+    ],
+    presence: [
+      { owner: 0, visits: [3, 6] },
+      { owner: 1, visits: [0, 8] },
+      { owner: 2, visits: [11], late: true },
+      { owner: 3, visits: [12], late: true },
     ],
   },
 ];
@@ -245,20 +263,31 @@ interface App {
   chips: HTMLElement[];
   /** Chips revealed only in Act IV, as teammates' agents fill the shared doc. */
   lateChips: HTMLElement[];
+  /** Teammate avatars in this doc's gutter — rebuilt with the document. */
+  gutter: GutterAvatar[];
   readonly termPanel: HTMLElement;
   readonly termCmd: HTMLElement;
   readonly termBody: HTMLElement;
-  // Act IV presence layer.
-  readonly avatars: HTMLElement[];
-  readonly cursors: Cursor[];
-  readonly activityDots: HTMLElement[];
+  /** Presence avatars on sidebar rows — teammates working in other docs. */
+  readonly presence: HTMLElement[];
 }
 
-/** A teammate's live cursor: an element that glides from off-screen to a rest spot. */
-interface Cursor {
+/** A teammate reading along in a document's gutter, beside the block they're on. */
+interface GutterAvatar {
   readonly el: HTMLElement;
-  readonly x: number;
-  readonly y: number;
+  readonly late: boolean;
+  /** Stagger offset into the pop-in, so the team doesn't arrive all at once. */
+  readonly delay: number;
+  /** Vertical rest positions (px, top) for each block visited, in order. */
+  readonly tops: readonly number[];
+}
+
+/** Interpolate an avatar's top across the blocks it visits, t in [0,1]. */
+function stepTops(tops: readonly number[], t: number): number {
+  if (tops.length <= 1) return tops[0] ?? 0;
+  const seg = clamp01(t) * (tops.length - 1);
+  const i = Math.min(tops.length - 2, Math.floor(seg));
+  return lerp(tops[i]!, tops[i + 1]!, easeInOut(seg - i));
 }
 
 /**
@@ -269,38 +298,55 @@ function fillDoc(
   docPanel: HTMLElement,
   docTitle: HTMLElement,
   doc: Doc,
-): Pick<App, 'skels' | 'chips' | 'lateChips'> {
+): Pick<App, 'skels' | 'chips' | 'lateChips' | 'gutter'> {
   while (docPanel.lastChild && docPanel.lastChild !== docTitle) docPanel.removeChild(docPanel.lastChild);
   docTitle.textContent = doc.title;
 
   const skels: HTMLElement[] = [];
   const chips: HTMLElement[] = [];
   const lateChips: HTMLElement[] = [];
+  // Every block in order, so presence entries can index the ones they read.
+  const blockEls: HTMLElement[] = [];
   for (const block of doc.blocks) {
     if (block.kind === 'chip') {
       const el = document.createElement('div');
       el.className = 'chip chip--doc';
       el.innerHTML = '<span class="chip__dot"></span><span class="chip__label"></span>';
       el.querySelector<HTMLElement>('.chip__label')!.textContent = block.session.cmd;
-      // An agent someone else launched carries their avatar.
-      if (block.owner !== undefined) {
-        const mate = TEAM[block.owner]!;
-        const badge = document.createElement('span');
-        badge.className = 'chip__owner';
-        badge.textContent = mate.initial;
-        badge.style.background = mate.color;
-        el.append(badge);
-      }
       docPanel.append(el);
       (block.late ? lateChips : chips).push(el);
+      blockEls.push(el);
     } else {
       const el = document.createElement('div');
       el.className = `skel skel--${block.kind}`;
       docPanel.append(el);
       skels.push(el);
+      blockEls.push(el);
     }
   }
-  return { skels, chips, lateChips };
+
+  // Teammate presence lives in the document's left gutter — an avatar beside the
+  // block each person is reading. Built here so its rest positions can be measured
+  // against the freshly laid-out blocks; the render loop drives its `top`.
+  const gutter: GutterAvatar[] = [];
+  let live = 0;
+  let late = 0;
+  for (const person of doc.presence ?? []) {
+    const mate = TEAM[person.owner]!;
+    const el = document.createElement('div');
+    el.className = 'doc-avatar';
+    el.textContent = mate.initial;
+    el.style.background = mate.color;
+    docPanel.append(el);
+    const tops = person.visits.map((bi) => {
+      const b = blockEls[bi]!;
+      return b.offsetTop + b.offsetHeight / 2 - 10;
+    });
+    const isLate = person.late === true;
+    gutter.push({ el, late: isLate, tops, delay: isLate ? late++ * 0.25 : live++ * 0.12 });
+  }
+
+  return { skels, chips, lateChips, gutter };
 }
 
 /** Build a session's lines into the terminal. How many show is set per-frame by
@@ -334,7 +380,7 @@ function buildApp(): App {
   const sidebar = document.createElement('div');
   sidebar.className = 'app__sidebar';
   const docRows: (HTMLElement | null)[] = [];
-  const activityDots: HTMLElement[] = [];
+  const presence: HTMLElement[] = [];
   let docIndex = 0;
   for (const node of TREE) {
     const row = document.createElement('div');
@@ -349,13 +395,15 @@ function buildApp(): App {
     label.textContent = node.label;
     row.append(icon, label);
 
-    // A teammate working in this doc — a colored presence dot, revealed in Act IV.
+    // A teammate working in this doc, shown as a presence avatar, revealed in Act IV.
     if (node.active !== undefined) {
-      const dot = document.createElement('span');
-      dot.className = 'app__row-active';
-      dot.style.background = TEAM[node.active]!.color;
-      row.append(dot);
-      activityDots.push(dot);
+      const mate = TEAM[node.active]!;
+      const av = document.createElement('span');
+      av.className = 'app__row-avatar';
+      av.textContent = mate.initial;
+      av.style.background = mate.color;
+      row.append(av);
+      presence.push(av);
     }
 
     sidebar.append(row);
@@ -371,7 +419,7 @@ function buildApp(): App {
   const docTitle = document.createElement('div');
   docTitle.className = 'app__doc-title';
   docPanel.append(docTitle);
-  const { skels, chips, lateChips } = fillDoc(docPanel, docTitle, DOCS[0]!);
+  const { skels, chips, lateChips, gutter } = fillDoc(docPanel, docTitle, DOCS[0]!);
 
   // Right pane: the selected terminal. Its own border lets it stand alone at first.
   const termPanel = document.createElement('div');
@@ -390,42 +438,9 @@ function buildApp(): App {
   body.append(sidebar, docPanel, termPanel);
   root.append(frame, body);
 
-  // Act IV presence: teammate avatars in the title bar, live cursors over the app.
-  const avatarRow = document.createElement('div');
-  avatarRow.className = 'app__avatars';
-  const avatars = TEAM.map((mate) => {
-    const el = document.createElement('span');
-    el.className = 'app__avatar';
-    el.textContent = mate.initial;
-    el.style.background = mate.color;
-    avatarRow.append(el);
-    return el;
-  });
-  frame.querySelector<HTMLElement>('.app__titlebar')!.append(avatarRow);
-
-  // Rest spots over the document pane (percent of the app), where teammates read.
-  const cursorRests: ReadonlyArray<{ x: number; y: number }> = [
-    { x: 40, y: 32 },
-    { x: 52, y: 56 },
-    { x: 30, y: 72 },
-  ];
-  const cursors = cursorRests.map((rest, i) => {
-    const mate = TEAM[i]!;
-    const el = document.createElement('div');
-    el.className = 'cursor';
-    el.style.color = mate.color;
-    el.innerHTML =
-      '<svg class="cursor__arrow" viewBox="0 0 12 12" width="14" height="14">' +
-      '<path d="M1 1l9.5 4-4 1.4L5 11 1 1z" fill="currentColor" stroke="#000" stroke-width="0.6"/></svg>' +
-      `<span class="cursor__tag">${mate.initial}</span>`;
-    root.append(el);
-    return { el, x: rest.x, y: rest.y };
-  });
-
   return {
     root, frame, termFrame, sidebar, docRows, docPanel, docTitle,
-    skels, chips, lateChips, termPanel, termCmd, termBody,
-    avatars, cursors, activityDots,
+    skels, chips, lateChips, gutter, termPanel, termCmd, termBody, presence,
   };
 }
 
@@ -582,6 +597,7 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       app.skels = built.skels;
       app.chips = built.chips;
       app.lateChips = built.lateChips;
+      app.gutter = built.gutter;
       for (let i = 0; i < app.docRows.length; i += 1) {
         app.docRows[i]?.classList.toggle('is-active', i === selectedDoc);
       }
@@ -617,29 +633,33 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
     }
 
     // --- Act IV: multiuser -----------------------------------------------------
-    // On the held final frame, a presence layer builds: teammates join the title
-    // bar, their cursors arrive, and the shared doc fills with their agents.
+    // On the held final frame a presence layer pops in: teammates appear on other
+    // docs in the sidebar, read along in this doc's gutter, and their agents fill
+    // the shared document. Nothing here shows until the beat begins (p >= 1).
     const avatarsP = span(p, T4.avatarsStart, T4.avatarsEnd);
     const cursorsP = span(p, T4.cursorsStart, T4.cursorsEnd);
     const densifyP = span(p, T4.densifyStart, T4.densifyEnd);
 
-    for (let i = 0; i < app.avatars.length; i += 1) {
-      const a = easeOut(clamp01((avatarsP - i * 0.12) / 0.5));
-      app.avatars[i]!.style.opacity = String(a);
-      app.avatars[i]!.style.transform = `scale(${lerp(0.5, 1, a)})`;
+    // Teammates working elsewhere, as presence avatars on their sidebar rows.
+    for (let i = 0; i < app.presence.length; i += 1) {
+      const a = easeOut(clamp01((avatarsP - i * 0.13) / 0.5));
+      app.presence[i]!.style.opacity = String(a);
+      app.presence[i]!.style.transform = `scale(${lerp(0.4, 1, a)})`;
     }
 
-    for (let i = 0; i < app.cursors.length; i += 1) {
-      const c = app.cursors[i]!;
-      const t = easeOut(clamp01((cursorsP - i * 0.14) / 0.55));
-      c.el.style.opacity = String(clamp01(t * 3));
-      const fromX = c.x < 50 ? -8 : 108;
-      c.el.style.left = `${lerp(fromX, c.x, t)}%`;
-      c.el.style.top = `${lerp(c.y + 8, c.y, t)}%`;
+    // Teammates in this document, reading along in its gutter and hopping between
+    // the blocks they look at. The late arrivals pop in with their own agents.
+    for (const g of app.gutter) {
+      const pin = g.late
+        ? easeOut(clamp01((densifyP - g.delay) / 0.6))
+        : easeOut(clamp01((avatarsP - g.delay) / 0.5));
+      const hopP = g.late ? 1 : easeInOut(clamp01((cursorsP - g.delay) / 0.7));
+      g.el.style.opacity = String(pin);
+      g.el.style.transform = `scale(${lerp(0.4, 1, pin)})`;
+      g.el.style.top = `${stepTops(g.tops, hopP)}px`;
     }
 
-    for (const dot of app.activityDots) dot.style.opacity = String(cursorsP);
-
+    // The shared document fills with teammates' agents as the beat lands.
     for (let i = 0; i < app.lateChips.length; i += 1) {
       app.lateChips[i]!.style.opacity = String(easeOut(clamp01((densifyP - i * 0.25) / 0.6)));
     }
