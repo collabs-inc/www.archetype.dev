@@ -5,6 +5,7 @@
   --edge: #1d232b;
   --panel: #0f1318;
   --accent: #6ee7a8;
+  --cc-orange: #d97757;
 
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --sans: ui-sans-serif, system-ui, -apple-system, "Inter", sans-serif;
@@ -47,7 +48,7 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  width: 360px;
+  width: 420px;
   border-radius: 8px;
   background: var(--panel);
   border: 1px solid var(--edge);
@@ -111,17 +112,54 @@ body {
    Height snaps rather than transitions, so the scroll position below stays true. */
 .term__line {
   --on: clamp(0, calc(var(--shown) - var(--i)), 1);
+  /* A line is done once another line has appeared below it; the newest revealed
+     line is the one in progress. */
+  --done: clamp(0, calc(var(--shown) - var(--i) - 1), 1);
+  --active: calc(var(--on) - var(--done));
+  position: relative;
   height: calc(var(--on) * 1.7em);
+  padding-left: 16px;
   opacity: var(--on);
   overflow: hidden;
+  /* The line still running glows Claude orange, like its asterisk; it settles to
+     dim once the next line lands and it becomes a completed step. */
+  color: color-mix(in oklab, var(--cc-orange) calc(var(--active) * 100%), var(--dim));
+  transition: opacity 0.18s linear, color 0.18s linear;
+}
+
+/* Status marker in the gutter, mirroring Claude Code: a dot for a completed
+   step, an orange asterisk for the one still running. */
+.term__line::before,
+.term__line::after {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 1.7em;
+  display: flex;
+  align-items: center;
   transition: opacity 0.18s linear;
 }
 
+.term__line::before {
+  content: "\25CF";
+  font-size: 7px;
+  color: var(--dim);
+  opacity: var(--done);
+}
+
+.term__line::after {
+  content: "\2733\FE0E";
+  font-size: 11px;
+  color: var(--cc-orange);
+  opacity: var(--active);
+}
+
+/* Agent mode: a white caret, distinct from the green shell cursor while typing. */
 .term__caret {
   width: 7px;
   height: 13px;
   margin-top: 2px;
-  background: var(--accent);
+  background: #fff;
   animation: blink 1s steps(1) infinite;
 }
 
@@ -133,6 +171,8 @@ body {
   left: 50%;
   bottom: 6vh;
   width: 76px;
+  /* Above the crowd (terminals run z-index 1..34) so the can is never buried. */
+  z-index: 50;
   opacity: 0;
   will-change: transform, opacity;
 }
@@ -142,6 +182,9 @@ body {
   border-radius: 3px;
   background: #2a323b;
   margin: 0 6px 4px;
+  /* Hinged at the back-left corner, so it swings up and open on the purge. */
+  transform-origin: left bottom;
+  will-change: transform;
 }
 
 .trash__can {

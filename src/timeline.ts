@@ -3,14 +3,20 @@
 export const ACTS = {
   /** Act I: terminals accrete until the screen is unusable. */
   accretionStart: 0.0,
-  accretionEnd: 0.56,
+  accretionEnd: 0.48,
+  /**
+   * The hold: every window is open and running. Nothing new arrives — this is
+   * the stretch where the last, freshly-spawned terminals fill up with output,
+   * so the whole screen is alive at once before it gets thrown away.
+   */
+  holdEnd: 0.66,
   /** Act II: everything goes in the trash, then a held beat of nothing. */
-  purgeStart: 0.56,
-  purgeEnd: 0.68,
-  emptyEnd: 0.76,
+  purgeStart: 0.66,
+  purgeEnd: 0.76,
+  emptyEnd: 0.8,
   /** Act III: the document builds, agents are born in place, camera pulls back. */
-  docStart: 0.76,
-  pullBackStart: 0.9,
+  docStart: 0.8,
+  pullBackStart: 0.91,
   docEnd: 1.0,
 } as const;
 
@@ -32,7 +38,7 @@ export const HERO = {
   typeEnd: 0.05,
   runStart: 0.06,
   /** Scroll distance per line of hero output. */
-  linePace: 0.02,
+  linePace: 0.018,
 } as const;
 
 /** The rest of the terminals hold off until the hero has had its moment. */
@@ -40,28 +46,31 @@ export const CROWD_START = 0.12;
 
 /**
  * The first arrivals land in a ring of slots around the hero, none of them
- * touching. A window is ~25vw x ~31vh, so the slots are pitched wider than that
- * — this is the phase where there is still room for everyone.
+ * touching. A window is ~29vw x ~31vh; the slots are pitched wider than that so
+ * there is still room for everyone, even after the jitter below is applied.
  */
 export const GRID_SLOTS = [
-  { x: 78, y: 50 },
-  { x: 22, y: 50 },
-  { x: 50, y: 16 },
-  { x: 50, y: 84 },
-  { x: 78, y: 16 },
-  { x: 22, y: 84 },
-  { x: 78, y: 84 },
-  { x: 22, y: 16 },
+  { x: 76, y: 50 },
+  { x: 24, y: 50 },
+  { x: 50, y: 17 },
+  { x: 50, y: 83 },
+  { x: 76, y: 17 },
+  { x: 24, y: 83 },
+  { x: 76, y: 83 },
+  { x: 24, y: 17 },
 ] as const;
 
+/** Each ring slot is nudged off its exact mark so the grid never looks ruled. */
+export const GRID_JITTER = { x: 2, y: 1.5 } as const;
+
 /** Where the orderly phase ends and windows start landing on top of each other. */
-export const GRID_END = 0.4;
+export const GRID_END = 0.33;
 
 /**
  * Scroll distance per line of crowd output. Paced so an agent that arrives early
  * is still printing when the purge comes — they never sit finished and idle.
  */
-export const LINE_PACE = 0.022;
+export const LINE_PACE = 0.018;
 
 export function clamp01(n: number): number {
   if (n < 0) return 0;

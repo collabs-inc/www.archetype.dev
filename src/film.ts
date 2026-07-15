@@ -1,6 +1,7 @@
 import { HERO_SESSION, SESSIONS } from './terminal-scripts';
 import {
   ACTS,
+  GRID_JITTER,
   GRID_SLOTS,
   HERO,
   LINE_PACE,
@@ -43,7 +44,12 @@ function scatter(i: number, rnd: () => number): { x: number; y: number } {
   if (i === 0) return { x: CENTER_X, y: CENTER_Y };
 
   const slot = GRID_SLOTS[i - 1];
-  if (slot) return { x: slot.x, y: slot.y };
+  if (slot) {
+    return {
+      x: slot.x + (rnd() - 0.5) * 2 * GRID_JITTER.x,
+      y: slot.y + (rnd() - 0.5) * 2 * GRID_JITTER.y,
+    };
+  }
 
   const j = i - 1 - GRID_SLOTS.length;
   const spread = TERMINAL_COUNT - 1 - GRID_SLOTS.length;
@@ -156,6 +162,7 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
   const trash = document.createElement('div');
   trash.className = 'trash';
   trash.innerHTML = '<div class="trash__lid"></div><div class="trash__can"></div>';
+  const lid = trash.querySelector<HTMLElement>('.trash__lid')!;
 
   const world = document.createElement('div');
   world.className = 'world';
@@ -180,7 +187,7 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
 
       if (p < t.spawn) {
         el.style.opacity = '0';
-        el.style.transform = `translate3d(${t.x}vw, ${t.y}vh, 0) translate(-50%, -50%) scale(.9)`;
+        el.style.transform = `translate3d(${t.x}vw, ${t.y}vh, 0) translate(-50%, -50%) scale(1)`;
         if (t.shown !== -1) {
           t.shown = -1;
           t.body.style.setProperty('--shown', '0');
@@ -188,15 +195,17 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
         continue;
       }
 
-      const appear = easeOut(span(p, t.spawn, t.spawn + 0.018));
+      // The window just pops in: full opacity, full size, the instant it spawns.
+      // No fade, no scale-up — it is simply open now, and it wasn't before.
       const purge = easeInOut(span(p, ACTS.purgeStart + (i / TERMINAL_COUNT) * 0.05, ACTS.purgeEnd));
 
+      // Sucked into the mouth of the can, not off the bottom of the screen.
       const x = lerp(t.x, 50, purge);
-      const y = lerp(t.y, 112, purge);
-      const scale = lerp(lerp(0.9, 1, appear), 0.04, purge);
+      const y = lerp(t.y, 89, purge);
+      const scale = lerp(1, 0.02, purge);
       // Windows sit square. The only rotation is the tumble on the way to the trash.
       const rot = lerp(0, i % 2 ? 40 : -40, purge);
-      const opacity = appear * (1 - clamp01((purge - 0.75) / 0.25));
+      const opacity = 1 - clamp01((purge - 0.75) / 0.25);
 
       el.style.opacity = String(opacity);
       el.style.transform =
@@ -228,12 +237,16 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
     }
 
     // --- The trash -------------------------------------------------------------
-    const trashIn = easeOut(span(p, ACTS.purgeStart - 0.03, ACTS.purgeStart + 0.04));
+    // The can rises into place just before the purge, then the lid swings open to
+    // take the crowd, and the whole thing leaves once the screen is clear.
+    const trashIn = easeOut(span(p, ACTS.purgeStart - 0.05, ACTS.purgeStart));
     const trashOut = span(p, ACTS.purgeEnd + 0.01, ACTS.emptyEnd);
+    const lidOpen = easeOut(span(p, ACTS.purgeStart - 0.02, ACTS.purgeStart + 0.05));
     const shake = Math.sin(p * 400) * 1.5 * (trashIn - trashOut);
     trash.style.opacity = String(trashIn * (1 - trashOut));
     trash.style.transform =
       `translate3d(-50%, ${lerp(30, 0, trashIn)}px, 0) rotate(${shake}deg) scale(${lerp(0.8, 1, trashIn)})`;
+    lid.style.transform = `rotate(${lerp(0, -122, lidOpen)}deg) translateY(${lerp(0, -1, lidOpen)}px)`;
 
     // --- Act III: the document -------------------------------------------------
     const docP = span(p, ACTS.docStart, ACTS.pullBackStart);
