@@ -345,7 +345,16 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
 
   const trash = document.createElement('div');
   trash.className = 'trash';
-  trash.innerHTML = '<div class="trash__lid"></div><div class="trash__can"></div>';
+  // A classic outlined can: handle, lid, tapered body, three ribs. The lid is its
+  // own group so it can swing open while the body stays put.
+  trash.innerHTML =
+    '<svg viewBox="0 0 64 78" fill="none" stroke="#fff" stroke-width="3" ' +
+    'stroke-linecap="round" stroke-linejoin="round">' +
+    '<g class="trash__lid"><path d="M24 9V7.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3V9"/>' +
+    '<path d="M9 9h46"/></g>' +
+    '<path d="M14.5 16 18 68a4.5 4.5 0 0 0 4.5 4h19a4.5 4.5 0 0 0 4.5-4L49.5 16"/>' +
+    '<path d="M24 26l1.6 38M32 26v38M40 26l-1.6 38"/>' +
+    '</svg>';
   const lid = trash.querySelector<HTMLElement>('.trash__lid')!;
 
   const app = buildApp();
@@ -376,9 +385,9 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
       // No fade, no scale-up — it is simply open now, and it wasn't before.
       const purge = easeInOut(span(p, ACTS.purgeStart + (i / TERMINAL_COUNT) * 0.05, ACTS.purgeEnd));
 
-      // Sucked into the mouth of the can, not off the bottom of the screen.
+      // Sucked into the mouth of the can, which now sits dead center on screen.
       const x = lerp(t.x, 50, purge);
-      const y = lerp(t.y, 89, purge);
+      const y = lerp(t.y, 47, purge);
       const scale = lerp(1, 0.02, purge);
       // Windows sit square. The only rotation is the tumble on the way to the trash.
       const rot = lerp(0, i % 2 ? 40 : -40, purge);
@@ -422,7 +431,8 @@ export function mountFilm(stage: HTMLElement): (p: number) => void {
     const shake = Math.sin(p * 400) * 1.5 * (trashIn - trashOut);
     trash.style.opacity = String(trashIn * (1 - trashOut));
     trash.style.transform =
-      `translate3d(-50%, ${lerp(30, 0, trashIn)}px, 0) rotate(${shake}deg) scale(${lerp(0.8, 1, trashIn)})`;
+      `translate3d(-50%, -50%, 0) translateY(${lerp(30, 0, trashIn)}px) ` +
+      `rotate(${shake}deg) scale(${lerp(0.8, 1, trashIn)})`;
     lid.style.transform = `rotate(${lerp(0, -122, lidOpen)}deg) translateY(${lerp(0, -1, lidOpen)}px)`;
 
     // --- Act III: the product assembles ----------------------------------------

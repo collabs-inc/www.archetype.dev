@@ -165,34 +165,30 @@ body {
 
 @keyframes blink { 50% { opacity: 0; } }
 
-/* The trash */
+/* The trash: a classic white-outline can, dead center, where the crowd converges. */
 .trash {
   position: absolute;
   left: 50%;
-  bottom: 6vh;
-  width: 76px;
+  top: 50%;
+  width: 84px;
   /* Above the crowd (terminals run z-index 1..34) so the can is never buried. */
   z-index: 50;
   opacity: 0;
   will-change: transform, opacity;
 }
 
-.trash__lid {
-  height: 7px;
-  border-radius: 3px;
-  background: #2a323b;
-  margin: 0 6px 4px;
-  /* Hinged at the back-left corner, so it swings up and open on the purge. */
-  transform-origin: left bottom;
-  will-change: transform;
+.trash svg {
+  display: block;
+  width: 100%;
+  /* A soft dark halo so the white outline stays legible over the busy crowd. */
+  filter: drop-shadow(0 2px 18px rgba(0, 0, 0, 0.6));
 }
 
-.trash__can {
-  height: 62px;
-  border-radius: 4px 4px 10px 10px;
-  background: linear-gradient(#1a2028, #12171d);
-  border: 1px solid #2a323b;
-  box-shadow: inset 0 12px 22px -12px #000;
+.trash__lid {
+  /* Hinged at the lid's back-left corner, so it swings up and open on the purge. */
+  transform-box: fill-box;
+  transform-origin: left bottom;
+  will-change: transform;
 }
 
 /* ── Act III: the product, one windowed app ───────────────────────────────── */
