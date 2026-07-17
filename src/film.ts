@@ -213,35 +213,46 @@ const DOC_SESSIONS: readonly (readonly Session[])[] = DOCS.map((d) =>
 );
 
 /**
- * The document tree in the sidebar. Folders nest files; the three `doc` rows are
- * the only ones the doc-switch beat scrubs through, but the tree is deep so the
- * product reads as a real workspace, not a three-item list.
+ * The sidebar mirrors the product's containment model: a workspace holds repos,
+ * each repo holds docs, each doc holds running terminals. The workspace is
+ * implicit (it's the whole window) and terminals live in the docs, not here —
+ * so the tree is exactly two levels: repos containing docs.
  */
 interface TreeNode {
   readonly label: string;
-  readonly kind: 'folder' | 'doc' | 'file';
-  readonly depth: number;
+  readonly kind: 'repo' | 'doc';
+  /** Index into DOCS — set only on the three rows the doc-switch beat scrubs through. */
+  readonly doc?: number;
   /** A teammate is working in this doc — shown as a presence dot in Act IV. */
   readonly active?: number;
 }
 
+/** Row icons: a git branch for repos, a folded-corner page for docs. */
+const REPO_ICON =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+  'stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="4.7" cy="3.5" r="1.7"/><circle cx="4.7" cy="12.5" r="1.7"/>' +
+  '<circle cx="11.3" cy="4.7" r="1.7"/>' +
+  '<path d="M4.7 5.2v5.6M11.3 6.4c0 2.7-4 2.6-6 3.6"/></svg>';
+const DOC_ICON =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+  'stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M4 1.8h5.2L12.2 4.8v9.4H4z"/><path d="M9.2 1.8v3h3"/></svg>';
+
 const TREE: readonly TreeNode[] = [
-  { label: 'Workspace', kind: 'folder', depth: 0 },
-  // The three docs we scrub through are siblings in this one branch.
-  { label: 'Projects', kind: 'folder', depth: 1 },
-  { label: DOCS[0]!.title, kind: 'doc', depth: 2, active: 2 },
-  { label: DOCS[1]!.title, kind: 'doc', depth: 2 },
-  { label: DOCS[2]!.title, kind: 'doc', depth: 2 },
-  { label: 'Search indexing', kind: 'file', depth: 2, active: 0 },
-  { label: 'Realtime sync', kind: 'file', depth: 2 },
-  { label: 'Notes', kind: 'folder', depth: 1 },
-  { label: 'Architecture', kind: 'file', depth: 2, active: 3 },
-  { label: 'On-call runbook', kind: 'file', depth: 2 },
-  { label: 'RFC drafts', kind: 'file', depth: 2, active: 1 },
-  { label: 'Archive', kind: 'folder', depth: 0 },
-  { label: 'Q1 planning', kind: 'file', depth: 1 },
-  { label: 'Incident 4402', kind: 'file', depth: 1 },
-  { label: 'Deprecations', kind: 'file', depth: 1 },
+  { label: 'api-server', kind: 'repo' },
+  // The three docs we scrub through are siblings in the first repo.
+  { label: DOCS[0]!.title, kind: 'doc', doc: 0, active: 2 },
+  { label: DOCS[1]!.title, kind: 'doc', doc: 1 },
+  { label: DOCS[2]!.title, kind: 'doc', doc: 2 },
+  { label: 'Search indexing', kind: 'doc', active: 0 },
+  { label: 'Realtime sync', kind: 'doc' },
+  { label: 'webapp', kind: 'repo' },
+  { label: 'Design system audit', kind: 'doc', active: 3 },
+  { label: 'RFC drafts', kind: 'doc', active: 1 },
+  { label: 'infra', kind: 'repo' },
+  { label: 'On-call runbook', kind: 'doc' },
+  { label: 'Incident 4402', kind: 'doc' },
 ];
 
 /** Chips in the first doc — the ones the chip-cycle beat steps through. */
@@ -250,7 +261,7 @@ const CHIPS_PER_DOC = DOC_SESSIONS[0]!.length;
 interface App {
   readonly root: HTMLElement;
   readonly sidebar: HTMLElement;
-  /** Sidebar rows for the switchable docs, in DOCS order (folder/file rows excluded). */
+  /** Sidebar rows for the switchable docs, in DOCS order (repo and other doc rows excluded). */
   readonly docRows: (HTMLElement | null)[];
   /** The window shell — title bar, border, background — that unites the panes. */
   readonly frame: HTMLElement;
@@ -376,20 +387,18 @@ function buildApp(): App {
   const body = document.createElement('div');
   body.className = 'app__body';
 
-  // Left pane: the document tree
+  // Left pane: repos containing docs
   const sidebar = document.createElement('div');
   sidebar.className = 'app__sidebar';
   const docRows: (HTMLElement | null)[] = [];
   const presence: HTMLElement[] = [];
-  let docIndex = 0;
   for (const node of TREE) {
     const row = document.createElement('div');
     row.className = `app__row app__row--${node.kind}`;
-    row.style.paddingLeft = `${10 + node.depth * 15}px`;
 
     const icon = document.createElement('span');
     icon.className = 'app__row-icon';
-    icon.textContent = node.kind === 'folder' ? '▾' : '·';
+    icon.innerHTML = node.kind === 'repo' ? REPO_ICON : DOC_ICON;
     const label = document.createElement('span');
     label.className = 'app__row-label';
     label.textContent = node.label;
@@ -407,10 +416,7 @@ function buildApp(): App {
     }
 
     sidebar.append(row);
-    if (node.kind === 'doc') {
-      docRows[docIndex] = row;
-      docIndex += 1;
-    }
+    if (node.doc !== undefined) docRows[node.doc] = row;
   }
 
   // Center pane: the selected document

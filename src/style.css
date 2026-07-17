@@ -237,10 +237,11 @@ body {
   background: #2a323b;
 }
 
-/* The panes sit inside the shell, below the title bar, flush and divided. */
+/* The panes sit inside the shell, below the title bar, flush and divided.
+   Inset 1px so they don't paint over the frame's own border. */
 .app__body {
   position: absolute;
-  inset: 38px 0 0;
+  inset: 38px 1px 1px;
   z-index: 1;
   display: flex;
 }
@@ -251,6 +252,8 @@ body {
   flex: none;
   padding: 14px 10px;
   border-right: 1px solid var(--edge);
+  /* Follow the frame's bottom-left curve so the pane bg doesn't square it off. */
+  border-radius: 0 0 0 11px;
   background: #0a0d11;
   font-family: var(--sans);
   font-size: 12.5px;
@@ -259,28 +262,46 @@ body {
   will-change: opacity;
 }
 
-/* Leaf rows — docs and files alike — are grayed; only folders and the active
-   row stand out. A scrubbed doc looks no different until it's selected. */
+/* Doc rows are grayed; only repo headers and the active row stand out.
+   A scrubbed doc looks no different until it's selected. */
 .app__row {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 10px;
+  padding: 4px 7px;
   border-radius: 6px;
   color: #6b7580;
   white-space: nowrap;
 }
 
+.app__row--doc { padding-left: 21px; }
+
 .app__row-icon {
   flex: none;
-  width: 9px;
-  text-align: center;
-  font-size: 9px;
+  width: 12px;
   color: #4d5661;
 }
 
-.app__row--folder { color: #d7dee6; font-weight: 500; }
-.app__row--folder .app__row-icon { color: #7c8894; font-size: 8px; }
+.app__row-icon svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+/* Repo names are lowercase and set in the mono font, so they read as git repos.
+   Each repo (bar the first) is set off from the docs above by a hairline divider. */
+.app__row--repo { position: relative; color: #d7dee6; font-family: var(--mono); font-size: 11.5px; }
+.app__row--repo:not(:first-child) { margin-top: 15px; }
+.app__row--repo:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 7px;
+  right: 7px;
+  height: 1px;
+  background: #1a222c;
+}
+.app__row--repo .app__row-icon { color: #7c8894; }
 .app__row.is-active { background: #16202b; color: #fff; }
 .app__row.is-active .app__row-icon { color: var(--accent); }
 
@@ -363,6 +384,8 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--panel);
+  /* Follow the frame's bottom-right curve so the pane bg doesn't square it off. */
+  border-radius: 0 0 11px 0;
   border-left: 1px solid color-mix(in oklab, var(--edge) calc(var(--frame) * 100%), transparent);
   opacity: 0;
   will-change: opacity;
